@@ -1,0 +1,7 @@
+firecrawl credits before: 964
+[formats] index: 10 families, 100 templates
+[qaqc] index: 32 families, 300 templates
+[pmc] index: 11 families, 150 templates
+detail pages: 550 total, 27 cached, 523 to fetch
+  25/523 {'firecrawl': 25, 'http': 0, 'cached': 3, 'failed': 0}
+  50/523 {'firecrawl': 50, 'http': 0, 'cached': 3, 'failed': 0}
