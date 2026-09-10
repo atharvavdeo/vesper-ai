@@ -14,7 +14,9 @@ echo "starting voiceid on :8788"
 ( cd voiceid && ./run.sh ) & pids+=($!)
 
 echo "starting backend on :8000"
-( cd backend && ./run.sh ) & pids+=($!)
+# The orchestration script starts VoiceID itself, so enforce its matching backend
+# gate here. A standalone backend may still deliberately opt out via its own env.
+( cd backend && SPEAKER_ID_ENABLED="${SPEAKER_ID_ENABLED:-true}" SPEAKER_ID_URL="${SPEAKER_ID_URL:-http://127.0.0.1:8788}" ./run.sh ) & pids+=($!)
 
 echo "starting frontend on :3000"
 ( cd app && npm run dev ) & pids+=($!)

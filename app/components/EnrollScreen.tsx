@@ -118,6 +118,7 @@ export default function EnrollScreen({
   );
 
   const capturedCount = clips.filter(Boolean).length;
+  const enrollmentUnavailable = status?.enabled === false || status?.reachable === false;
 
   const enroll = async () => {
     const blobs = clips.filter((b): b is Blob => b != null);
@@ -188,9 +189,23 @@ export default function EnrollScreen({
         </Card>
       ) : null}
 
-      <p className="text-xs text-zinc-400 px-1 leading-relaxed">
-        Record 3 canonical Hindi / Hinglish phrases (~{TAKE_SECONDS}s each) to train the site manager voice model.
-      </p>
+      {status?.enabled === false ? (
+        <Card tone="amber" title="Voice enrollment is unavailable">
+          <p className="text-xs leading-relaxed text-amber-100">
+            Speaker verification is disabled on this server. Start the app with <code>SPEAKER_ID_ENABLED=true</code> and the VoiceID sidecar, then refresh this page.
+          </p>
+        </Card>
+      ) : status?.reachable === false ? (
+        <Card tone="amber" title="VoiceID service is offline">
+          <p className="text-xs leading-relaxed text-amber-100">
+            Speaker verification is enabled but the VoiceID sidecar cannot be reached. Start it on the configured service URL, then refresh this page.
+          </p>
+        </Card>
+      ) : (
+        <p className="text-xs text-zinc-400 px-1 leading-relaxed">
+          Record 3 canonical Hindi / Hinglish phrases (~{TAKE_SECONDS}s each) to train the site manager voice model.
+        </p>
+      )}
 
       {/* 3 Voice Take Cards */}
       <div className="space-y-2.5">
@@ -211,7 +226,7 @@ export default function EnrollScreen({
                   variant={isRec ? "ghost" : captured ? "ghost" : "solid"}
                   size="sm"
                   onClick={() => (isRec ? stopTake() : startTake(idx))}
-                  disabled={recordingIdx != null && !isRec}
+                  disabled={enrollmentUnavailable || (recordingIdx != null && !isRec)}
                   className={isRec ? "border-red-500 text-red-200 bg-red-950/60" : ""}
                 >
                   {isRec ? (
@@ -252,7 +267,7 @@ export default function EnrollScreen({
         variant="solid"
         size="lg"
         onClick={enroll}
-        disabled={capturedCount < 3 || enrolling}
+        disabled={enrollmentUnavailable || capturedCount < 3 || enrolling}
         className="w-full mt-1"
       >
         {enrolling
