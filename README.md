@@ -120,6 +120,10 @@ grounded facts, contradictions and writes all come from the engine via typed too
 | **Data** | SQLite + `better-sqlite3` / stdlib `sqlite3` | 20 tables + 4 views (`v_current_facts`, `v_latest_drawings`, `v_permit_blockers`, `v_open_hold_points`) |
 | **Testing** | Vitest (TS) · `scenarios.py` (S01–S10 acceptance harness) | Pass/fail table for scripted error + barge-in scenarios |
 
+For the full request, identity, voice, safety, data, failure and deployment flows, see
+[ARCHITECTURE.md](ARCHITECTURE.md). The captured authentication walkthrough is available as
+[`docs/media/vesper-auth-flow.gif`](docs/media/vesper-auth-flow.gif).
+
 ---
 
 ## 5. Run It Locally
