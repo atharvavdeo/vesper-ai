@@ -20,6 +20,12 @@ const DECISION_LABELS: Record<DecisionKey, string> = {
   cancel: "Cancel",
 };
 
+const SUGGESTED_QUESTIONS = [
+  "What should I check before today's pour?",
+  "What is the latest drawing for column C-5?",
+  "Log rebar spacing 180 mm at C-5 on A-102 R4.",
+];
+
 // Minimal shape of the Web Speech API we use.
 type SpeechRecognitionLike = {
   lang: string;
@@ -521,6 +527,21 @@ export default function TalkScreen({
       </div>
 
       {/* Typed chat fallback */}
+      {!exhausted ? (
+        <div id="workflow-suggestions" className="flex flex-wrap gap-1.5 px-1">
+          <span className="w-full text-[10px] font-mono uppercase tracking-wider text-zinc-500">Try a question</span>
+          {SUGGESTED_QUESTIONS.map((question) => (
+            <button
+              key={question}
+              type="button"
+              onClick={() => setTyped(question)}
+              className="rounded-full border border-sky-200/15 bg-sky-300/[0.06] px-2.5 py-1 text-left text-[11px] text-sky-100/85 transition hover:border-sky-200/35 hover:bg-sky-300/[0.12]"
+            >
+              {question}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div id="workflow-typed-input" className="flex gap-2">
         <input
           value={typed}
