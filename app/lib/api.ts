@@ -305,7 +305,18 @@ export const api = {
     text: string,
     language: "en-IN" | "hi-IN" = "en-IN",
   ): Promise<{ ok: true; blob: Blob } | { ok: false; reason: string }> {
-    if (isDemo()) return { ok: false, reason: "demo" }; // demo speaks with the browser voice
+    if (isDemo()) {
+      // The demo carries no key: it plays Rime clips pre-rendered at build time
+      // (scripts/build_demo_audio.py). Unknown text -> browser voice fallback.
+      try {
+        const manifest = (await (await fetch("/demo-audio/manifest.json")).json()) as Record<string, string>;
+        const path = manifest[text];
+        if (path) return { ok: true, blob: await (await fetch(`/${path}`)).blob() };
+      } catch {
+        /* no manifest in this build */
+      }
+      return { ok: false, reason: "demo" };
+    }
     let res: Response;
     try {
       res = await fetch(`${API_BASE}/api/tts`, {
