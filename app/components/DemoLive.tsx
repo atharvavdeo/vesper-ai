@@ -120,6 +120,8 @@ export default function DemoLive() {
         </button>
       </div>
 
+      <p className="px-1 font-mono text-[10px] text-zinc-500">voice out: rime mistv3 · cove · websocket (recorded demo plays text only)</p>
+
       <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 font-mono text-[11px] text-emerald-200">
         Voice verified · 0.86 — writes unlocked for this manager
       </div>

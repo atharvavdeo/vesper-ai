@@ -4,7 +4,7 @@
    {
     "text": "What should I check before the L4 slab pour?",
     "response": {
-     "sessionId": "VS-1a08c7787b0-b8cb12",
+     "sessionId": "VS-1a08cbbb973-069ff5",
      "state": "capturing",
      "kind": "answer",
      "unresolved": false,
@@ -54,7 +54,7 @@
    {
     "text": "What is the cover at E-1?",
     "response": {
-     "sessionId": "VS-1a08c7787b5-a0252e",
+     "sessionId": "VS-1a08cbbb978-6b51e3",
      "state": "capturing",
      "kind": "answer",
      "unresolved": false,
@@ -97,7 +97,7 @@
    {
     "text": "and at E-2?",
     "response": {
-     "sessionId": "VS-1a08c7787b5-a0252e",
+     "sessionId": "VS-1a08cbbb978-6b51e3",
      "state": "capturing",
      "kind": "answer",
      "unresolved": false,
@@ -137,7 +137,7 @@
    {
     "text": "Any open RFIs?",
     "response": {
-     "sessionId": "VS-1a08c7787b8-cd3e6f",
+     "sessionId": "VS-1a08cbbb97b-ab3582",
      "state": "capturing",
      "kind": "answer",
      "unresolved": false,
@@ -171,7 +171,7 @@
    {
     "text": "E-1 column cover measured 30 mm",
     "response": {
-     "sessionId": "VS-1a08c7787b9-ad1e33",
+     "sessionId": "VS-1a08cbbb97d-e55fc6",
      "state": "challenging",
      "reply": {
       "text": "You reported cover at E-1, Level 1 as 30 mm, but A-201 R1 shows 40 mm, with a tolerance of plus or minus 5. Would you like to log the observation, raise an RFI, or raise an NCR?",
@@ -284,7 +284,7 @@
    {
     "text": "what is the tolerance there?",
     "response": {
-     "sessionId": "VS-1a08c7787b9-ad1e33",
+     "sessionId": "VS-1a08cbbb97d-e55fc6",
      "state": "challenging",
      "kind": "answer",
      "unresolved": false,
@@ -352,7 +352,7 @@
    {
     "decision": "raise_ncr",
     "response": {
-     "sessionId": "VS-1a08c7787b9-ad1e33",
+     "sessionId": "VS-1a08cbbb97d-e55fc6",
      "state": "logged",
      "reply": {
       "text": "The observation OBS-000110 has been logged for an NCR. Please notify the QA team.",
@@ -446,7 +446,7 @@
    {
     "text": "RW-1 wall thickness 350 mm as per C-401 revision R1",
     "response": {
-     "sessionId": "VS-1a08c7787be-e4e1cc",
+     "sessionId": "VS-1a08cbbb981-7af823",
      "state": "challenging",
      "reply": {
       "text": "The latest revision of drawing C-401 is R2, issued 4 September. It shows thickness at RW-1, GL as 350 mm. This is confirmed by RFI-060. Would you like to log the observation, raise an RFI, or raise an NCR?",
@@ -581,7 +581,7 @@
    {
     "decision": "log_observation",
     "response": {
-     "sessionId": "VS-1a08c7787be-e4e1cc",
+     "sessionId": "VS-1a08cbbb981-7af823",
      "state": "logged",
      "reply": {
       "text": "Observation OBS-000111 has been logged and linked to C-401 R2.",
@@ -687,7 +687,7 @@
    {
     "text": "Start the L4 slab pour now",
     "response": {
-     "sessionId": "VS-1a08c7787c2-b1a49f",
+     "sessionId": "VS-1a08cbbb985-8326bd",
      "state": "blocked",
      "reply": {
       "text": "Stop work for now. The pre-pour hold point at Level 4 slab is not released: Embedment items; Concrete cover, plus 6 more. Concrete pouring cannot begin. Would you like to stop work, raise an NCR, or cancel?",
@@ -777,7 +777,7 @@
    {
     "decision": "stop_work",
     "response": {
-     "sessionId": "VS-1a08c7787c2-b1a49f",
+     "sessionId": "VS-1a08cbbb985-8326bd",
      "state": "logged",
      "reply": {
       "text": "A stop-work instruction has been logged as OBS-000112. Please inform the safety officer now.",
@@ -854,7 +854,7 @@
    {
     "text": "Welding at Zone B level 3, everything looks fine, log it",
     "response": {
-     "sessionId": "VS-1a08c7787c4-1dcefc",
+     "sessionId": "VS-1a08cbbb988-5b5bce",
      "state": "blocked",
      "reply": {
       "text": "Logging the observation is not allowed yet. At Zone B, Level 3, the hot work permit HWP-0112 has mandatory checks still pending: Fire watcher assigned; Fire watch continues for minimum 60 minutes after hot work stops. Work cannot start until they are confirmed. Would you like to stop work, raise an NCR, or cancel?",
@@ -943,7 +943,7 @@
    {
     "decision": "stop_work",
     "response": {
-     "sessionId": "VS-1a08c7787c4-1dcefc",
+     "sessionId": "VS-1a08cbbb988-5b5bce",
      "state": "logged",
      "reply": {
       "text": "A stop-work instruction has been logged as OBS-000113. Please inform the safety officer now.",
@@ -1012,7 +1012,7 @@
    {
     "text": "C-5 column rebar spacing 180 mm",
     "response": {
-     "sessionId": "VS-1a08c7787c7-9701d9",
+     "sessionId": "VS-1a08cbbb98b-4d2df8",
      "state": "confirming",
      "reply": {
       "text": "At C-5, Level 3, column rebar spacing is 180 mm, which matches A-102 R4. Log it?",
@@ -1105,7 +1105,7 @@
    {
     "text": "yes",
     "response": {
-     "sessionId": "VS-1a08c7787c7-9701d9",
+     "sessionId": "VS-1a08cbbb98b-4d2df8",
      "state": "logged",
      "reply": {
       "text": "Observation OBS-000114 has been logged and linked to A-102 R4.",
@@ -1210,7 +1210,7 @@
    }
   ],
   "engine": {
-   "sessionId": "VS-1a08c7787ca-3077c8",
+   "sessionId": "VS-1a08cbbb98e-8d9327",
    "state": "challenging",
    "reply": {
     "text": "You reported cover at E-1, Level 1 as 30 mm, but A-201 R1 shows 40 mm, with a tolerance of plus or minus 5. Would you like to log the observation, raise an RFI, or raise an NCR?",
@@ -1706,7 +1706,7 @@
   },
   {
    "observation_id": "OBS-000114",
-   "created_at": "2026-09-10T17:57:18.921871+00:00",
+   "created_at": "2026-09-10T19:11:48.110119+00:00",
    "location_id": "P1:C-5:L3",
    "element": "column",
    "attribute": "rebar_spacing",
@@ -1743,7 +1743,7 @@
   },
   {
    "observation_id": "OBS-000113",
-   "created_at": "2026-09-10T17:57:18.918809+00:00",
+   "created_at": "2026-09-10T19:11:48.106790+00:00",
    "location_id": "P1:ZoneB:L3",
    "element": null,
    "attribute": "activity:hot_work",
@@ -1782,7 +1782,7 @@
   },
   {
    "observation_id": "OBS-000112",
-   "created_at": "2026-09-10T17:57:18.915926+00:00",
+   "created_at": "2026-09-10T19:11:48.103574+00:00",
    "location_id": "P1:Slab:L4",
    "element": "slab",
    "attribute": "activity:pour",
@@ -1821,7 +1821,7 @@
   },
   {
    "observation_id": "OBS-000111",
-   "created_at": "2026-09-10T17:57:18.913651+00:00",
+   "created_at": "2026-09-10T19:11:48.101016+00:00",
    "location_id": "P1:RW-1:GL",
    "element": "wall",
    "attribute": "thickness",
@@ -1860,7 +1860,7 @@
   },
   {
    "observation_id": "OBS-000110",
-   "created_at": "2026-09-10T17:57:18.909988+00:00",
+   "created_at": "2026-09-10T19:11:48.097291+00:00",
    "location_id": "P1:E-1:L1",
    "element": "column",
    "attribute": "cover",
@@ -2104,8 +2104,8 @@
  ],
  "conversations": [
   {
-   "session_id": "VS-1a08c7787ca-3077c8",
-   "started_at": "2026-09-10T17:57:18.922431+00:00",
+   "session_id": "VS-1a08cbbb98e-8d9327",
+   "started_at": "2026-09-10T19:11:48.110667+00:00",
    "ended_at": null,
    "lang": "en-IN",
    "turns": [
@@ -2113,43 +2113,43 @@
      "role": "user",
      "text": "What is the cover at E-1?",
      "state": "capturing",
-     "created_at": "2026-09-10T17:57:18.923601+00:00"
+     "created_at": "2026-09-10T19:11:48.111844+00:00"
     },
     {
      "role": "agent",
      "text": "At E-1, Level 1: column cover is 40 mm plus or minus 5, per A-201 R1 issued 26 August (IS 456 Cl. 26.4). Open RFI-061 (OPD block monsoon concrete-pour access).",
      "state": "capturing",
-     "created_at": "2026-09-10T17:57:18.923847+00:00"
+     "created_at": "2026-09-10T19:11:48.112107+00:00"
     },
     {
      "role": "user",
      "text": "E-1 column cover measured 30 mm",
      "state": "capturing",
-     "created_at": "2026-09-10T17:57:18.924175+00:00"
+     "created_at": "2026-09-10T19:11:48.112445+00:00"
     },
     {
      "role": "agent",
      "text": "You reported cover at E-1, Level 1 as 30 mm, but A-201 R1 shows 40 mm, with a tolerance of plus or minus 5. Would you like to log the observation, raise an RFI, or raise an NCR?",
      "state": "challenging",
-     "created_at": "2026-09-10T17:57:18.925282+00:00"
+     "created_at": "2026-09-10T19:11:48.113300+00:00"
     },
     {
      "role": "user",
      "text": "what is the tolerance there?",
      "state": "challenging",
-     "created_at": "2026-09-10T17:57:18.926337+00:00"
+     "created_at": "2026-09-10T19:11:48.114866+00:00"
     },
     {
      "role": "agent",
      "text": "At E-1, Level 1: column cover is 40 mm plus or minus 5, per A-201 R1 issued 26 August (IS 456 Cl. 26.4). Open RFI-061 (OPD block monsoon concrete-pour access).",
      "state": "challenging",
-     "created_at": "2026-09-10T17:57:18.926610+00:00"
+     "created_at": "2026-09-10T19:11:48.115260+00:00"
     }
    ]
   },
   {
-   "session_id": "VS-1a08c7787c7-9701d9",
-   "started_at": "2026-09-10T17:57:18.919424+00:00",
+   "session_id": "VS-1a08cbbb98b-4d2df8",
+   "started_at": "2026-09-10T19:11:48.107603+00:00",
    "ended_at": null,
    "lang": "en-IN",
    "turns": [
@@ -2157,31 +2157,31 @@
      "role": "user",
      "text": "C-5 column rebar spacing 180 mm",
      "state": "capturing",
-     "created_at": "2026-09-10T17:57:18.919808+00:00"
+     "created_at": "2026-09-10T19:11:48.107978+00:00"
     },
     {
      "role": "agent",
      "text": "At C-5, Level 3, column rebar spacing is 180 mm, which matches A-102 R4. Log it?",
      "state": "confirming",
-     "created_at": "2026-09-10T17:57:18.920672+00:00"
+     "created_at": "2026-09-10T19:11:48.108882+00:00"
     },
     {
      "role": "user",
      "text": "yes",
      "state": "confirming",
-     "created_at": "2026-09-10T17:57:18.921035+00:00"
+     "created_at": "2026-09-10T19:11:48.109224+00:00"
     },
     {
      "role": "agent",
      "text": "Observation OBS-000114 has been logged and linked to A-102 R4.",
      "state": "logged",
-     "created_at": "2026-09-10T17:57:18.922164+00:00"
+     "created_at": "2026-09-10T19:11:48.110399+00:00"
     }
    ]
   },
   {
-   "session_id": "VS-1a08c7787c4-1dcefc",
-   "started_at": "2026-09-10T17:57:18.916541+00:00",
+   "session_id": "VS-1a08cbbb988-5b5bce",
+   "started_at": "2026-09-10T19:11:48.104156+00:00",
    "ended_at": null,
    "lang": "en-IN",
    "turns": [
@@ -2189,31 +2189,31 @@
      "role": "user",
      "text": "Welding at Zone B level 3, everything looks fine, log it",
      "state": "capturing",
-     "created_at": "2026-09-10T17:57:18.916953+00:00"
+     "created_at": "2026-09-10T19:11:48.104900+00:00"
     },
     {
      "role": "agent",
      "text": "Logging the observation is not allowed yet. At Zone B, Level 3, the hot work permit HWP-0112 has mandatory checks still pending: Fire watcher assigned; Fire watch continues for minimum 60 minutes after hot work stops. Work cannot start until they are confirmed. Would you like to stop work, raise an NCR, or cancel?",
      "state": "blocked",
-     "created_at": "2026-09-10T17:57:18.917691+00:00"
+     "created_at": "2026-09-10T19:11:48.105644+00:00"
     },
     {
      "role": "user",
      "text": "[button] stop_work",
      "state": "blocked",
-     "created_at": "2026-09-10T17:57:18.917994+00:00"
+     "created_at": "2026-09-10T19:11:48.105936+00:00"
     },
     {
      "role": "agent",
      "text": "A stop-work instruction has been logged as OBS-000113. Please inform the safety officer now.",
      "state": "logged",
-     "created_at": "2026-09-10T17:57:18.919140+00:00"
+     "created_at": "2026-09-10T19:11:48.107303+00:00"
     }
    ]
   },
   {
-   "session_id": "VS-1a08c7787c2-b1a49f",
-   "started_at": "2026-09-10T17:57:18.914310+00:00",
+   "session_id": "VS-1a08cbbb985-8326bd",
+   "started_at": "2026-09-10T19:11:48.101615+00:00",
    "ended_at": null,
    "lang": "en-IN",
    "turns": [
@@ -2221,31 +2221,31 @@
      "role": "user",
      "text": "Start the L4 slab pour now",
      "state": "capturing",
-     "created_at": "2026-09-10T17:57:18.914637+00:00"
+     "created_at": "2026-09-10T19:11:48.102289+00:00"
     },
     {
      "role": "agent",
      "text": "Stop work for now. The pre-pour hold point at Level 4 slab is not released: Embedment items; Concrete cover, plus 6 more. Concrete pouring cannot begin. Would you like to stop work, raise an NCR, or cancel?",
      "state": "blocked",
-     "created_at": "2026-09-10T17:57:18.915183+00:00"
+     "created_at": "2026-09-10T19:11:48.102852+00:00"
     },
     {
      "role": "user",
      "text": "[button] stop_work",
      "state": "blocked",
-     "created_at": "2026-09-10T17:57:18.915485+00:00"
+     "created_at": "2026-09-10T19:11:48.103147+00:00"
     },
     {
      "role": "agent",
      "text": "A stop-work instruction has been logged as OBS-000112. Please inform the safety officer now.",
      "state": "logged",
-     "created_at": "2026-09-10T17:57:18.916211+00:00"
+     "created_at": "2026-09-10T19:11:48.103853+00:00"
     }
    ]
   },
   {
-   "session_id": "VS-1a08c7787be-e4e1cc",
-   "started_at": "2026-09-10T17:57:18.910766+00:00",
+   "session_id": "VS-1a08cbbb981-7af823",
+   "started_at": "2026-09-10T19:11:48.097868+00:00",
    "ended_at": null,
    "lang": "en-IN",
    "turns": [
@@ -2253,31 +2253,31 @@
      "role": "user",
      "text": "RW-1 wall thickness 350 mm as per C-401 revision R1",
      "state": "capturing",
-     "created_at": "2026-09-10T17:57:18.911281+00:00"
+     "created_at": "2026-09-10T19:11:48.098625+00:00"
     },
     {
      "role": "agent",
      "text": "The latest revision of drawing C-401 is R2, issued 4 September. It shows thickness at RW-1, GL as 350 mm. This is confirmed by RFI-060. Would you like to log the observation, raise an RFI, or raise an NCR?",
      "state": "challenging",
-     "created_at": "2026-09-10T17:57:18.912345+00:00"
+     "created_at": "2026-09-10T19:11:48.099739+00:00"
     },
     {
      "role": "user",
      "text": "[button] log_observation",
      "state": "challenging",
-     "created_at": "2026-09-10T17:57:18.912727+00:00"
+     "created_at": "2026-09-10T19:11:48.100087+00:00"
     },
     {
      "role": "agent",
      "text": "Observation OBS-000111 has been logged and linked to C-401 R2.",
      "state": "logged",
-     "created_at": "2026-09-10T17:57:18.914039+00:00"
+     "created_at": "2026-09-10T19:11:48.101360+00:00"
     }
    ]
   },
   {
-   "session_id": "VS-1a08c7787b9-ad1e33",
-   "started_at": "2026-09-10T17:57:18.905924+00:00",
+   "session_id": "VS-1a08cbbb97d-e55fc6",
+   "started_at": "2026-09-10T19:11:48.093169+00:00",
    "ended_at": null,
    "lang": "en-IN",
    "turns": [
@@ -2285,37 +2285,37 @@
      "role": "user",
      "text": "E-1 column cover measured 30 mm",
      "state": "capturing",
-     "created_at": "2026-09-10T17:57:18.906444+00:00"
+     "created_at": "2026-09-10T19:11:48.093751+00:00"
     },
     {
      "role": "agent",
      "text": "You reported cover at E-1, Level 1 as 30 mm, but A-201 R1 shows 40 mm, with a tolerance of plus or minus 5. Would you like to log the observation, raise an RFI, or raise an NCR?",
      "state": "challenging",
-     "created_at": "2026-09-10T17:57:18.907362+00:00"
+     "created_at": "2026-09-10T19:11:48.094758+00:00"
     },
     {
      "role": "user",
      "text": "what is the tolerance there?",
      "state": "challenging",
-     "created_at": "2026-09-10T17:57:18.908366+00:00"
+     "created_at": "2026-09-10T19:11:48.095796+00:00"
     },
     {
      "role": "agent",
      "text": "At E-1, Level 1: column cover is 40 mm plus or minus 5, per A-201 R1 issued 26 August (IS 456 Cl. 26.4). Open RFI-061 (OPD block monsoon concrete-pour access).",
      "state": "challenging",
-     "created_at": "2026-09-10T17:57:18.908658+00:00"
+     "created_at": "2026-09-10T19:11:48.096071+00:00"
     },
     {
      "role": "user",
      "text": "[button] raise_ncr",
      "state": "challenging",
-     "created_at": "2026-09-10T17:57:18.909015+00:00"
+     "created_at": "2026-09-10T19:11:48.096360+00:00"
     },
     {
      "role": "agent",
      "text": "The observation OBS-000110 has been logged for an NCR. Please notify the QA team.",
      "state": "logged",
-     "created_at": "2026-09-10T17:57:18.910493+00:00"
+     "created_at": "2026-09-10T19:11:48.097605+00:00"
     }
    ]
   }
@@ -2339,7 +2339,7 @@
      {
       "observation_id": "OBS-000115",
       "project_id": "P1",
-      "session_id": "VS-1a08c7787de-b86c16",
+      "session_id": "VS-1a08cbbb9a3-491b7e",
       "spoken_text": "haan toh column line C-5 pe rebar spacing 180 mm hai, drawing A 102 rev teen mein 200 mm dikh raha hai | achha R4 aa gaya tha... ok. bas observation log kar do, RFI nahi chahiye",
       "structured_summary": "P1:C-5:L3 · column rebar_spacing = 180 mm · linked A-102@R4 (latest 180mm ±10) · flags: revision_mismatch",
       "location_id": "P1:C-5:L3",
@@ -2359,7 +2359,7 @@
       "photo_url": null,
       "gps_lat": null,
       "gps_lng": null,
-      "created_at": "2026-09-10T17:57:18.945790+00:00"
+      "created_at": "2026-09-10T19:11:48.134674+00:00"
      }
     ],
     "transcript": [
@@ -2401,7 +2401,7 @@
      {
       "observation_id": "OBS-000116",
       "project_id": "P1",
-      "session_id": "VS-1a08c7787e2-7b174e",
+      "session_id": "VS-1a08cbbb9a7-ad4406",
       "spoken_text": "umm C-6 column pe stirrup ka spacing do sau bees... 220 mm aa raha hai, A-102 ke hisaab se | haan pakka 220 hai, teen jagah naapa. RFI raise karo, consultant ko bhejo",
       "structured_summary": "P1:C-6:L3 · column rebar_spacing = 220 mm · linked A-102@R4 (latest 180mm ±10) · flags: dimension_mismatch",
       "location_id": "P1:C-6:L3",
@@ -2421,7 +2421,7 @@
       "photo_url": null,
       "gps_lat": null,
       "gps_lng": null,
-      "created_at": "2026-09-10T17:57:18.949544+00:00"
+      "created_at": "2026-09-10T19:11:48.138295+00:00"
      }
     ],
     "transcript": [
@@ -2461,7 +2461,7 @@
      {
       "observation_id": "OBS-000117",
       "project_id": "P1",
-      "session_id": "VS-1a08c7787e6-2bc55e",
+      "session_id": "VS-1a08cbbb9aa-7b173e",
       "spoken_text": "column C-5 pe tie spacing ek sau assi mm, drawing A-102 rev | wait wait, C-5 nahi, C-6. C-6 pe ek sau assi hai, R4 drawing | haan C-6, log kar do",
       "structured_summary": "P1:C-6:L3 · column rebar_spacing = 180 mm · linked A-102@R4 (latest 180mm ±10) · no contradictions",
       "location_id": "P1:C-6:L3",
@@ -2481,7 +2481,7 @@
       "photo_url": null,
       "gps_lat": null,
       "gps_lng": null,
-      "created_at": "2026-09-10T17:57:18.954274+00:00"
+      "created_at": "2026-09-10T19:11:48.143342+00:00"
      }
     ],
     "transcript": [
@@ -2570,7 +2570,7 @@
      {
       "observation_id": "OBS-000118",
       "project_id": "P1",
-      "session_id": "VS-1a08c7787ec-65b1c9",
+      "session_id": "VS-1a08cbbb9b1-571e9e",
       "spoken_text": "Zone B level 3 mein welding chal rahi hai lift machine room brackets ki, sab theek hai, work ok log kar do | achha fire watcher abhi nahi hai wahan... theek hai, kaam rukwa deta hoon, stop work",
       "structured_summary": "P1:ZoneB:L3 · activity hot_work · linked M-401@R1 · flags: permit_blocker",
       "location_id": "P1:ZoneB:L3",
@@ -2590,7 +2590,7 @@
       "photo_url": null,
       "gps_lat": null,
       "gps_lng": null,
-      "created_at": "2026-09-10T17:57:18.959339+00:00"
+      "created_at": "2026-09-10T19:11:48.148222+00:00"
      }
     ],
     "transcript": [
@@ -2632,7 +2632,7 @@
      {
       "observation_id": "OBS-000119",
       "project_id": "P1",
-      "session_id": "VS-1a08c7787ef-09644b",
+      "session_id": "VS-1a08cbbb9b4-d2c3a2",
       "spoken_text": "L4 slab ki thickness humne check ki, ek sau pachees... 125 mm hai, S-301 ke according | arre matlab shuttering R1 ke hisaab se lag gayi? NCR raise karo, pour se pehle theek karna padega",
       "structured_summary": "P1:Slab:L4 · slab thickness = 125 mm · linked S-301@R2 (latest 150mm ±5) · flags: dimension_mismatch",
       "location_id": "P1:Slab:L4",
@@ -2652,7 +2652,7 @@
       "photo_url": null,
       "gps_lat": null,
       "gps_lng": null,
-      "created_at": "2026-09-10T17:57:18.961775+00:00"
+      "created_at": "2026-09-10T19:11:48.150596+00:00"
      }
     ],
     "transcript": [
@@ -2694,7 +2694,7 @@
      {
       "observation_id": "OBS-000120",
       "project_id": "P1",
-      "session_id": "VS-1a08c7787f2-3b5301",
+      "session_id": "VS-1a08cbbb9b7-065437",
       "spoken_text": "B-4 column mein cover pachees mm mil raha hai, cover blocks chhote lage hain lagta hai | haan NCR daal do, aur bar bender ko bolo 40 wale blocks lagaye",
       "structured_summary": "P1:B-4:L3 · column cover = 25 mm · linked A-102@R4 (latest 40mm ±5) · flags: dimension_mismatch",
       "location_id": "P1:B-4:L3",
@@ -2714,7 +2714,7 @@
       "photo_url": null,
       "gps_lat": null,
       "gps_lng": null,
-      "created_at": "2026-09-10T17:57:18.964948+00:00"
+      "created_at": "2026-09-10T19:11:48.153833+00:00"
      }
     ],
     "transcript": [
@@ -2756,7 +2756,7 @@
      {
       "observation_id": "OBS-000121",
       "project_id": "P1",
-      "session_id": "VS-1a08c7787f5-6b62f7",
+      "session_id": "VS-1a08cbbb9ba-2fb5d2",
       "spoken_text": "chalo L4 slab ka pour shuru karte hain, pump aa gaya hai, RMC truck bhi gate pe khada hai | consultant ne abhi release nahi diya? theek hai, pour hold karo, truck ko wait karao",
       "structured_summary": "P1:Slab:L4 · activity pour · linked S-302@R1 · flags: hold_point_blocker",
       "location_id": "P1:Slab:L4",
@@ -2776,7 +2776,7 @@
       "photo_url": null,
       "gps_lat": null,
       "gps_lng": null,
-      "created_at": "2026-09-10T17:57:18.967363+00:00"
+      "created_at": "2026-09-10T19:11:48.156205+00:00"
      }
     ],
     "transcript": [
@@ -2816,7 +2816,7 @@
      {
       "observation_id": "OBS-000122",
       "project_id": "P1",
-      "session_id": "VS-1a08c7787f8-99e301",
+      "session_id": "VS-1a08cbbb9bc-c77714",
       "spoken_text": "haan so, D-3 column ka cover chaalees mm check kiya, drawing A-102 rev chaar, sab theek hai | haan confirm, log karo",
       "structured_summary": "P1:D-3:L3 · column cover = 40 mm · linked A-102@R4 (latest 40mm ±5) · no contradictions",
       "location_id": "P1:D-3:L3",
@@ -2836,7 +2836,7 @@
       "photo_url": null,
       "gps_lat": null,
       "gps_lng": null,
-      "created_at": "2026-09-10T17:57:18.970826+00:00"
+      "created_at": "2026-09-10T19:11:48.159715+00:00"
      }
     ],
     "transcript": [
@@ -2878,7 +2878,7 @@
      {
       "observation_id": "OBS-000123",
       "project_id": "P1",
-      "session_id": "VS-1a08c7787fb-626af7",
+      "session_id": "VS-1a08cbbb9c0-007268",
       "spoken_text": "C-4 column pe tie spacing 200 hai, drawing A-109 mein bhi 200 hi hai | oh sorry, A-102 bola tha, rev 4. log kar do",
       "structured_summary": "P1:C-4:L3 · column rebar_spacing = 200 mm · linked A-102@R4 (latest 200mm ±10) · no contradictions",
       "location_id": "P1:C-4:L3",
@@ -2898,7 +2898,7 @@
       "photo_url": null,
       "gps_lat": null,
       "gps_lng": null,
-      "created_at": "2026-09-10T17:57:18.974331+00:00"
+      "created_at": "2026-09-10T19:11:48.162919+00:00"
      }
     ],
     "transcript": [

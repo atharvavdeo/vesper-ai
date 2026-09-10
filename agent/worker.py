@@ -35,7 +35,9 @@ from livekit.agents import RunContext, llm  # noqa: E402
 from livekit.plugins import groq, openai, rime, silero  # noqa: E402
 
 from engine_bridge import Brain  # noqa: E402
+from engine.extract import extract  # noqa: E402
 from engine.memory import greeting  # noqa: E402
+from engine.speech import speakable  # noqa: E402
 from voiceprofile import VoiceProfiler  # noqa: E402
 
 logger = logging.getLogger("vesper.agent")
@@ -100,6 +102,8 @@ STT_PROMPT = (
 
 
 def _stt():
+    # large-v3, not turbo: turbo was ~150 ms faster but hallucinated the prompt under 5 dB drill
+    # noise in scripts/voice_acceptance.py (T2). Accuracy in noise is the product.
     return groq.STT(model=os.getenv("GROQ_STT_MODEL", "whisper-large-v3"), language="en",
                     prompt=STT_PROMPT)
 
@@ -110,10 +114,16 @@ def _tts():
                     api_key=os.getenv("RIME_API_KEY"), use_websocket=True)
 
 
+def _may_write(text: str) -> bool:
+    ex = extract(text)
+    return bool(ex.decision in ("log_observation", "raise_rfi", "raise_ncr", "stop_work") or ex.affirm)
+
+
 class VesperAgent(Agent):
     def __init__(self, brain: Brain, room: rtc.Room) -> None:
         self.brain = brain
         self.room = room
+        self.profiler: VoiceProfiler | None = None
         try:
             brief = brain.brief_text()
         except Exception as e:  # never let memory failure kill the session
@@ -142,6 +152,9 @@ class VesperAgent(Agent):
     async def handle_text(self, text: str, from_tap: bool = False) -> None:
         if from_tap:
             self._cut_speech()  # a tapped prompt supersedes whatever Vesper was still saying
+        elif self.brain.speaker_required and self.profiler and _may_write(text):
+            # a spoken command that could write is verified on its own audio, right now
+            await self.profiler.verify_recent()
         result = self.brain.observe(text)
         self._last = result
         await self.publish({"type": "engine", "result": result, "user_text": text})
@@ -171,7 +184,7 @@ class VesperAgent(Agent):
         if result.get("speaker_locked") and result.get("state") in ("challenging", "confirming", "blocked"):
             reply += " Logging is locked until your voice is verified."
         if reply:
-            self.session.say(reply)
+            self.session.say(speakable(reply))  # full text is on screen; speech is shaped for the ear
 
     # ---- LLM tools (only reached for unresolved questions) ----------------------------
     @function_tool
@@ -199,20 +212,28 @@ async def entrypoint(ctx: JobContext) -> None:
     # live voice profiling (SpeechBrain via voiceid sidecar) -> gates the write decisions
     profiler = VoiceProfiler(brain, on_update=agent.publish)
     profiler.attach(ctx.room)
+    agent.profiler = profiler
 
     session = AgentSession(
         stt=_stt(),
         llm=_llm(),
         tts=_tts(),
-        vad=silero.VAD.load(),
+        vad=silero.VAD.load(min_silence_duration=0.35),
         user_away_timeout=1800.0,
-        # Site noise: a clang or a passing truck must not cut Vesper off. Require real speech
-        # (>= 0.6 s and 2 words) to interrupt, and resume if the "interruption" was just noise.
-        min_interruption_duration=0.6,
-        min_interruption_words=2,
-        false_interruption_timeout=1.2,
-        resume_false_interruption=True,
-        min_endpointing_delay=0.45,
+        turn_handling={
+            # Site commands are short and declarative: end the turn on voice activity rather than
+            # the semantic end-of-turn model, which held uncertain turns ("Any open RFIs?") for
+            # its full 3 s max delay.
+            "turn_detection": "vad",
+            "endpointing": {"min_delay": 0.3, "max_delay": 1.2},
+            # Plain VAD interruption: LiveKit's cloud "adaptive" detector timed out mid barge-in
+            # and only then fell back (2.3 s to stop Rime in T3). Groq Whisper has no streaming
+            # interim words, so a word-count rule would wait for the whole correction. Interrupt on
+            # >= 0.5 s of voice; if no words follow within 1 s it was noise and playback resumes.
+            "interruption": {"mode": "vad", "min_duration": 0.5, "min_words": 0,
+                             "resume_false_interruption": True, "false_interruption_timeout": 1.0},
+            "preemptive_generation": {"enabled": False},  # replies come from the engine, not an LLM
+        },
     )
 
     @ctx.room.on("data_received")
@@ -235,8 +256,10 @@ async def entrypoint(ctx: JobContext) -> None:
     brief = brain.site_brief()
     await agent.publish({"type": "brief", "brief": brief})
     await agent.publish({"type": "session", "session_id": brain.session_id,
-                         "speaker_required": brain.speaker_required})
-    session.say(greeting(brief))
+                         "speaker_required": brain.speaker_required,
+                         "tts": {"provider": "rime", "model": "mistv3", "lang": "eng",
+                                 "speaker": os.getenv("RIME_SPEAKER_EN", "cove"), "transport": "websocket"}})
+    session.say(speakable(greeting(brief)))
 
 
 if __name__ == "__main__":

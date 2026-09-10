@@ -191,6 +191,7 @@ function RoomView({ onEnd }: { onEnd: () => void }) {
   const [brief, setBrief] = useState<SiteBrief | null>(null);
   const [speaker, setSpeaker] = useState<SpeakerState | null>(null);
   const [speakerRequired, setSpeakerRequired] = useState(false);
+  const [tts, setTts] = useState<{ provider: string; model: string; speaker: string; transport: string } | null>(null);
 
   // Mute MY mic (not Vesper): while muted nothing reaches STT, so background noise can't be
   // transcribed or cut Vesper off while it answers.
@@ -232,7 +233,9 @@ function RoomView({ onEnd }: { onEnd: () => void }) {
         score?: number | null;
         reason?: string | null;
         speaker_required?: boolean;
+        tts?: { provider: string; model: string; speaker: string; transport: string };
       };
+      if (d.type === "session" && d.tts) setTts(d.tts);
       if (d.type === "speaker") setSpeaker({ match: !!d.match, score: d.score ?? null, reason: d.reason });
       if (d.type === "session") setSpeakerRequired(!!d.speaker_required);
       if (d.type === "engine" && d.result) {
@@ -362,6 +365,11 @@ function RoomView({ onEnd }: { onEnd: () => void }) {
           End
         </button>
       </div>
+
+      {/* Active speech provider is always visible (judging rule: fallbacks must be observable) */}
+      <p className="px-1 font-mono text-[10px] text-zinc-500">
+        voice out: {tts ? `${tts.provider} ${tts.model} · ${tts.speaker} · ${tts.transport}` : "waiting for agent…"}
+      </p>
 
       {speakerRequired ? <SpeakerBadge speaker={speaker} /> : null}
 

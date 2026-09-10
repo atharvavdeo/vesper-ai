@@ -107,20 +107,71 @@ provider can no longer leave the live conversation silent.
 
 ---
 
-## Screens
+## Screenshots
 
 <p align="center">
-  <img src="docs/media/screens/landing-hero.jpg" width="820" alt="Landing hero"/>
-</p>
-<p align="center">
-  <img src="docs/media/screens/app-live-challenge.jpg" width="200" alt="Live: contradiction with evidence"/>
-  <img src="docs/media/screens/app-talk-answer.jpg" width="200" alt="Talk: answers from the record"/>
-  <img src="docs/media/screens/app-talk-permit-blocker.jpg" width="200" alt="Talk: permit blocker"/>
-  <img src="docs/media/screens/tour-05-evidence.jpg" width="200" alt="Guided tour"/>
+  <img src="docs/media/vesper-walkthrough.gif" alt="Vesper.ai walkthrough: site memory, drawing contradiction, permit blocker, audit log, scenario suite and voiceprint gate" width="820">
+  <br>
+  <sub>12-step walkthrough, regenerate with <code>python scripts/build_walkthrough_gif.py</code>.</sub>
 </p>
 
-Try it without signing in at **`/demo`** — the full console on recorded engine output, with a
-guided tour. The walkthrough and every screenshot are in [DEMO.md](DEMO.md).
+<table>
+  <tr>
+    <td colspan="6" align="center">
+      <img src="docs/media/screens/landing-hero.jpg" alt="Vesper.ai landing page hero" width="820"><br>
+      <b>Site AI agents that catch errors before they're built</b><br>
+      <sub>The landing page pitch: speak in Hinglish and every observation is checked against the latest drawings, RFIs, BOQ and permits, backed by 0 wrong-revision logs in acceptance tests.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center" valign="top">
+      <img src="docs/media/screens/app-live-replay.jpg" alt="Live screen opening with site memory" width="260"><br>
+      <b>Opens with site memory</b><br>
+      <sub>Voice verified at 0.86 unlocks writes, and Vesper opens by flagging C-401 R2 and the unreleased hold point CL-PP-L4-001 at Slab L4.</sub>
+    </td>
+    <td colspan="2" align="center" valign="top">
+      <img src="docs/media/screens/app-live-challenge.jpg" alt="Live contradiction between spoken cover and drawing" width="260"><br>
+      <b>Challenges contradictions</b><br>
+      <sub>"E-1 column cover measured 30 mm" is challenged against A-201 R1 (40 mm &plusmn; 5, IS 456 Cl. 26.4) before anything is logged.</sub>
+    </td>
+    <td colspan="2" align="center" valign="top">
+      <img src="docs/media/screens/app-talk-permit-blocker.jpg" alt="Hot-work permit blocker" width="260"><br>
+      <b>Blocks unsafe work</b><br>
+      <sub>Hot work at Zone B L3 is refused because permit HWP-0112 still lacks its fire-watch checks, leaving only Stop work, Raise NCR or Cancel.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td></td>
+    <td colspan="2" align="center" valign="top">
+      <img src="docs/media/screens/app-logs.jpg" alt="Audit trail of site observations" width="260"><br>
+      <b>Audit trail tied to revisions</b><br>
+      <sub>Each observation records its drawing revision and links, e.g. RW-1 350 mm on C-401@R2 with RFI-060, while the hot-work entry is flagged CONFLICT.</sub>
+    </td>
+    <td colspan="2" align="center" valign="top">
+      <img src="docs/media/screens/app-scenarios.jpg" alt="Scenario evaluator results" width="260"><br>
+      <b>Scenario suite: 10 / 10</b><br>
+      <sub>The regression suite passes 10 of 10 scenarios with 0 wrong logs, covering revision mismatches, tolerance breaches, barge-ins and permit blockers.</sub>
+    </td>
+    <td></td>
+  </tr>
+</table>
+
+Try it without signing in at **`/demo`**: the full console on recorded engine output, with a
+guided tour. The spoken walkthrough and every screenshot are in [DEMO.md](DEMO.md).
+
+## Measured voice result
+
+The hard voice claim and its acceptance test are in [RIME_EVIDENCE.md](RIME_EVIDENCE.md).
+`scripts/voice_acceptance.py` speaks committed WAV fixtures into a real LiveKit room and measures
+Vesper's Rime audio on the shipped path. Run `20260911-003352`:
+
+| | Result |
+| --- | --- |
+| Barge-in: manager cuts off a spoken challenge to correct E-1 → E-2 | Rime stops **1065 ms** after they start talking; correction held (E-2, 38 mm); stale challenge never resumed — **PASS** |
+| Same question under drill noise, 5 dB SNR | answered correctly — **PASS** |
+| A different voice says "log that observation" | voiceprint 0.03 < 0.70 → refused, nothing written — **PASS** |
+| Enrolled manager says it | written, linked to A-201@R1 — **PASS** |
+| End of turn → first audible Rime audio | median **1988 ms** (target ≤ 1500 ms) — **MISS**; ~650 ms of it is batch Whisper STT |
 
 ---
 
@@ -130,10 +181,10 @@ guided tour. The walkthrough and every screenshot are in [DEMO.md](DEMO.md).
 | --- | --- | --- |
 | **Frontend** | Next.js 16 · React 19 · TypeScript · Tailwind v4 | Live / Observations / Scenarios / Enroll screens, site-memory panel |
 | **Voice transport** | LiveKit Agents + `livekit-client` (WebRTC) | Real-time full-duplex audio, barge-in, interruption handling |
-| **STT** | Groq Whisper (`livekit.plugins.groq`) | Hinglish speech → text on noisy sites |
-| **TTS** | **Rime** (Arcana) via server-side proxy | Natural Hinglish spoken challenges; API key never reaches the browser |
+| **STT** | Groq Whisper `whisper-large-v3` (`livekit.plugins.groq`), site-vocabulary prompt | Speech → text on noisy sites (turbo rejected: it hallucinated under drill noise) |
+| **TTS** | **Rime**: `mistv3`/`cove`/`eng` over websocket (live); `arcana`/`astra`/`hin` and `mistv3`/`cove`/`eng` via HTTPS (Talk) | Every spoken reply; key never reaches the browser |
 | **LLM** | Cerebras `gpt-oss-120b` *primary* → NVIDIA NIM → Groq (LiveKit `FallbackAdapter`) | Only for questions the engine cannot answer from the record; grounded by `recall` |
-| **VAD** | Silero | Turn detection / barge-in |
+| **VAD** | Silero (0.35 s silence), VAD endpointing 0.3–1.2 s, VAD interruption ≥ 0.5 s with false-interruption resume | Turn detection and barge-in that survives site noise |
 | **Backend** | FastAPI + Uvicorn (`:8000`) | Deterministic engine, TTS proxy, speaker gate, scenario runner |
 | **Engine** | Pure Python — `extract` · `numbers` · `contradictions` · `dialogue` · `replies` | Rule-based, testable, no model in the decision path |
 | **Speaker ID** | SpeechBrain **ECAPA-TDNN** + PyTorch (CPU), FastAPI sidecar (`:8788`) | Cosine-similarity verification against the enrolled manager |
@@ -327,27 +378,35 @@ good" — it's **zero wrong logs**.
 
 ## 7. Rime voice contract and evidence
 
-The explicit Hinglish mode uses the organizer configuration — **model `arcana`**, **speaker
-`astra`**, and **language `hin`**. The default English Talk mode uses **model `mistv3`**,
-**speaker `cove`**, and **language `eng`**, matching the low-latency LiveKit worker. Vesper sends an HTTPS `POST` with JSON and Bearer authentication to
-`https://users.rime.ai/v1/rime-tts`, requests `audio/mp3`, and returns `audio/mpeg` from
-`POST /api/tts` to one browser `<audio>` element. The API key stays server-side.
+| Path | Model ID | Speaker | Language | Endpoint / transport | Audio format |
+| --- | --- | --- | --- | --- | --- |
+| **Live voice (judged flow)** | `mistv3` | `cove` | `eng` | LiveKit Agents `livekit-plugins-rime` 1.8.0 with `use_websocket=True` (Rime streaming websocket), delivered to the browser over LiveKit WebRTC | Rime PCM → Opus/WebRTC |
+| Talk, English | `mistv3` | `cove` | `eng` | HTTPS `POST https://users.rime.ai/v1/rime-tts` (JSON, Bearer) via the backend `/api/tts` proxy | requests `audio/mp3`, returns `audio/mpeg` to one `<audio>` element |
+| Talk, Hinglish (organizer configuration) | `arcana` | `astra` | `hin` | same endpoint and proxy | same |
 
-Run the non-secret preflight before a demo or deployment:
+- **Rime is the primary spoken output.** Every reply, challenge, blocker and answer is spoken by Rime. A reply is
+  never only on screen.
+- **Replies are shaped for the ear before synthesis** (`backend/engine/speech.py`): short sentences, no
+  typographic dashes, and capped length. Without this, the open-RFI answer produced no audio at all on
+  the websocket (see evidence).
+- **The active provider is shown in the UI.** Live prints `voice out: rime mistv3 · cove · websocket`; Talk
+  shows `RIME`, or a **No Rime key** badge when it falls back to browser speech synthesis.
+- **The key stays server-side.** `/api/tts` requires a signed-in user.
+
+Run the organizer preflight (no secret is printed):
 
 ```bash
-python3 scripts/rime_preflight.py --env-file backend/.env.local
-python3 scripts/rime_preflight.py --env-file backend/.env.local --request
+python3 scripts/rime_preflight.py --env-file backend/.env.local            # arcana / astra / hin; secret present
+python3 scripts/rime_preflight.py --env-file backend/.env.local --request  # returns audio/mp3 bytes
 ```
 
-The full claim, procedure, tested result, and limitations are in
-[RIME_EVIDENCE.md](./RIME_EVIDENCE.md).
+The claim, acceptance test, procedure, results and limitations are in [RIME_EVIDENCE.md](./RIME_EVIDENCE.md).
 
 ## 8. Third-party services and failure behavior
 
 | Service | Purpose | Failure behavior |
 | --- | --- | --- |
-| Rime | Spoken agent responses | `/api/tts` returns an error; the Talk screen falls back to browser speech synthesis and shows a missing/unavailable Rime status. |
+| Rime | Primary spoken output (live: mistv3/cove/eng over websocket) | Live: the LiveKit plugin retries, and the text reply is still shown. Talk: `/api/tts` errors → browser speech synthesis with a visible **No Rime key** badge. |
 | Groq | Whisper STT and LLM fallback | A failed STT request is surfaced to the user; typed observations remain available. |
 | Cerebras / NVIDIA NIM | LLM for questions the engine cannot resolve (Cerebras first, NVIDIA next, Groq last) | Fallback moves to the next provider on error or 6 s timeout; engine answers never depend on it. |
 | LiveKit Cloud | Full-duplex browser/worker voice transport | Token minting fails clearly if configuration is missing; typed Talk mode remains available. |
@@ -410,7 +469,11 @@ render blueprints validate render.yaml
   are still useful before production.
 - Desktop, tablet, and mobile browser layout checks pass. A full physical-phone LiveKit
   conversation validation remains pending.
-- The Rime proxy buffers the upstream response; it is not true chunked audio streaming.
+- First audible audio after the manager stops talking is ~2 s median (target 1.5 s), dominated by
+  batch Whisper STT (~650 ms) plus VAD and endpointing windows. See RIME_EVIDENCE.md.
+- The live voice acceptance test uses synthetic voices and synthetic drill noise over a direct
+  LiveKit track, not a physical phone on site.
+- The Talk `/api/tts` proxy buffers the upstream MP3; the live LiveKit path streams over the Rime websocket.
 - Rime, Groq, NVIDIA, and LiveKit are external services: credentials, quota, latency, and network availability affect live behavior.
 - Cloudflare Pages is live for the landing only. End-to-end Cloudflare deployment remains blocked
   until Containers access is enabled and the SQLite-to-D1/R2 migration is completed.

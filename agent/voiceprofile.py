@@ -26,6 +26,7 @@ ENABLED = os.getenv("SPEAKER_ID_ENABLED", "true").strip().lower() in ("1", "true
 # Only verify while the manager is actually speaking: silence and background hum make poor
 # voiceprints and caused false locks. RMS threshold on int16 PCM.
 SPEECH_RMS = int(os.getenv("SPEAKER_ID_MIN_RMS", "450"))
+SEGMENT_GAP_SEC = 0.5  # silence that separates one utterance from the next
 
 
 def _pcm16_to_wav(pcm: bytes, sample_rate: int = SR) -> bytes:
@@ -53,6 +54,8 @@ class VoiceProfiler:
         self._task: asyncio.Task | None = None
         self._last_verify = 0.0
         self._closed = False
+        self._seg = bytearray()          # voiced audio of the utterance in progress / just finished
+        self._last_voiced = 0.0
 
     def attach(self, room: rtc.Room) -> None:
         if not ENABLED:
@@ -74,6 +77,11 @@ class VoiceProfiler:
                 pcm = ev.frame.data.tobytes()
                 if _rms(pcm) < SPEECH_RMS:
                     continue  # skip silence / muted mic so the window holds voiced audio
+                now_v = time.monotonic()
+                if now_v - self._last_voiced > SEGMENT_GAP_SEC:
+                    self._seg = bytearray()  # a pause starts a new utterance
+                self._last_voiced = now_v
+                self._seg.extend(pcm)
                 self._buf.extend(pcm)
                 if len(self._buf) > self._max:
                     del self._buf[: len(self._buf) - self._max]
@@ -84,9 +92,23 @@ class VoiceProfiler:
         finally:
             await stream.aclose()
 
-    async def verify_now(self) -> None:
-        pcm = bytes(self._buf)
-        if len(pcm) < SR * 2:  # < 1 s
+    async def verify_recent(self) -> bool:
+        """Verify ONLY the utterance that carried the command, right before a write. The rolling
+        4 s check alone could let a stranger's "log it" inherit the manager's earlier pass, and a
+        fixed tail window would blend the manager's previous sentence into the stranger's."""
+        if not ENABLED:
+            return True
+        self._last_verify = time.monotonic()
+        await self.verify_now(pcm=bytes(self._seg), min_bytes=int(SR * 2 * 0.5))
+        return bool(self.brain.speaker_ok)
+
+    async def verify_now(self, pcm: bytes | None = None, min_bytes: int = SR * 2) -> None:
+        strict = pcm is not None
+        pcm = pcm if strict else bytes(self._buf)
+        if len(pcm) < min_bytes:  # too little voiced audio to judge
+            if strict:
+                self.brain.speaker_ok = False
+                self.brain.speaker_reason = "command too short to verify"
             return
         wav = _pcm16_to_wav(pcm)
         try:
@@ -98,6 +120,9 @@ class VoiceProfiler:
                 self.brain.speaker_ok = bool(j.get("match"))
                 self.brain.speaker_score = float(j.get("score", 0.0))
                 self.brain.speaker_reason = None
+                logger.info("voiceprint %s: score %.3f match=%s (%.1fs voiced)",
+                            "command" if strict else "rolling", self.brain.speaker_score,
+                            self.brain.speaker_ok, len(pcm) / (SR * 2))
             else:
                 # Fail closed: not enrolled (409), bad audio or sidecar error all lock writes.
                 self.brain.speaker_ok = False

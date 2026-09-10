@@ -90,7 +90,7 @@ def answer(repo, raw: str, ex, ctx: dict) -> dict:
 
     parts: list[str] = []
     topic = _topic(raw)
-    if topic and not loc and not ex.attribute:
+    if topic and not ex.attribute and not (ex.grid or ex.zone or ex.drawingNumber):  # own location beats carried context
         text = _topic_answer(repo, topic)
         return {"text": text, "facts": [], "location_id": None, "context": dict(ctx), "resolved": True}
     if loc:

@@ -171,15 +171,17 @@ class DialogueSession:
 
         # ---------------- decision
         decision = decision or ex.decision
-        if decision in ("log_observation", "raise_rfi", "raise_ncr", "stop_work") and getattr(self, "writes_locked", False):
-            events.append(f"decision_refused:speaker_gate:{decision}")
-            decision = None
         ambiguous_yes = False
         if not decision and ex.affirm and not had_pending and not changed:
             if self.lastOffer == "log":
                 decision = "log_observation"
             elif self.lastOffer == "log_or_rfi":
                 ambiguous_yes = True
+        # Speaker gate AFTER every way a decision can arise (explicit, spoken, or an "okay/yes"
+        # to an offered log) — checking before the affirm path let "OK, log that" slip through.
+        if decision in ("log_observation", "raise_rfi", "raise_ncr", "stop_work") and getattr(self, "writes_locked", False):
+            events.append(f"decision_refused:speaker_gate:{decision}")
+            decision = None
         if decision:
             events.append(f"decision:{decision}")
 

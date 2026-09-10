@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 import config
 import db as dbmod
+from engine.speech import speakable
 
 # --- engine (WS-A). Defensive import so the server still boots for frontend dev. -----
 try:
@@ -470,7 +471,7 @@ _tts_cache: dict[str, bytes] = {}
 async def tts(request: Request):
     _user_id(request)
     body = await request.json()
-    text = (body.get("text") or "").strip()[:600]
+    text = speakable((body.get("text") or "").strip()[:600])  # same ear-shaping as the live agent
     language = str(body.get("language") or "en-IN").strip().lower()
     if not text:
         raise HTTPException(422, "text required")

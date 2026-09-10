@@ -100,7 +100,7 @@ enrolled voice scored **0.86**, a different voice **0.04** (threshold 0.70).
 
 ### 2:45 — Noise and interruptions
 Tap the **mic button** to mute *yourself* while a grinder runs. Talk over Vesper mid-sentence and
-it stops; a short clang doesn't (≥ 0.6 s and two words are needed to interrupt).
+it stops (≥ 0.5 s of voice interrupts; if no words follow within 1 s it was noise and Vesper resumes).
 
 ### 2:50 — Proof it isn't cherry-picked
 **Scenarios → Run All** → **10 / 10 pass, 0 wrong logs.**
@@ -127,6 +127,22 @@ prompt so the **Choose** panel has options, and runs the scenario suite for the 
 </p>
 
 ---
+
+## Stress case for the recorded video (from the acceptance test)
+
+Show the hard voice problem live, then show the measured result.
+
+1. Say **"E-1 column cover measured 30 mm"** and let Vesper start the challenge.
+2. Mid-sentence, talk over it: **"Wait, not E one. E two. Cover is thirty eight millimetres."**
+   Rime stops (1065 ms in the measured run), the E-1 challenge never comes back, and Vesper says
+   *"At E-2, Level 1, column cover is 38 mm, which matches A-201 R1. Log it?"*
+3. Have a colleague say **"Okay, log that observation."** It is refused (voiceprint 0.03). Then say
+   it yourself and it is written, linked to A-201@R1.
+4. Point at the Live screen's `voice out: rime mistv3 · cove · websocket` line: the active speech provider.
+5. Show `evidence/runs/20260911-003352/report.md` and play `heard.mp3`. That is exactly what Vesper
+   said during the automated run.
+
+Reproduce: `agent/.venv/bin/python scripts/voice_acceptance.py` (see [RIME_EVIDENCE.md](RIME_EVIDENCE.md)).
 
 ## Before a live demo
 

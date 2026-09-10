@@ -119,6 +119,8 @@ def normalize_text(raw: str) -> str:
     t = re.sub(r"\bm\s?m\b", "mm", t)
     t = re.sub(r"\bmilli?\s?meters?\b|\bmilli?\s?metres?\b|\bmili\b|\bmilli\b", "mm", t)
     t = re.sub(r"\bcenti\s?meters?\b|\bcenti\s?metres?\b|\bcenti\b", "cm", t)
+    # ASR spells the plural several ways ("RFI-S", "R F I s"); a stray "rfi" must not read as "raise an RFI"
+    t = re.sub(r"\br\.?\s?f\.?\s?i\.?\s?-?\s?s\b", "rfis", t)
     return normalize_numbers(t)
 
 
@@ -395,7 +397,7 @@ def extract(raw: str) -> Extraction:
     if cancel:
         decisions.append({"d": "cancel", "pos": cancel.start()})
     log = re.search(
-        r"\blog\s*(kar|karo|kardo|kar do|it|this|karna|karein|kijiye|observation)\b|\b(observation|entry)\s*(log|save|darj|record)\b|\b(record|save|darj|note)\s*(kar|karo|kar do|it)\b|\blog observation\b|^log$|\bhaan,? log\b|\blog\b[.!]?$",
+        r"\blog\s*(kar|karo|kardo|kar do|it|this|that|the|karna|karein|kijiye|observation)\b|\b(observation|entry)\s*(log|save|darj|record)\b|\b(record|save|darj|note)\s*(kar|karo|kar do|it)\b|\blog observation\b|^log$|\bhaan,? log\b|\blog\b[.!]?$",
         normalized,
     )
     if log and not re.search(r"\blog\s*(mat|nahi|na)\b|\bdon'?t log\b|\bdo not log\b", normalized):

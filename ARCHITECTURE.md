@@ -116,12 +116,13 @@ sequenceDiagram
     L->>W: Audio stream + barge-in events
     W->>S: Streaming STT with construction vocabulary prompt
     S-->>W: Transcript
-    W->>V: Verify enrolled speaker sample
+    W->>V: Verify enrolled speaker (rolling 4 s) and re-verify the command's own utterance before any write
     V-->>W: Similarity score / verified state
     W->>E: Brain.observe(verbatim transcript) — every finished turn, no LLM hop
     E->>D: Resolve current facts and rule views
     E-->>W: entities, blockers, contradictions, allowed decisions
     W-->>B: Publish structured result for evidence cards
+    Note over W,R: every reply passes engine.speech.speakable() (short sentences, no typographic dashes, capped length) before Rime
     alt question
       W->>R: Speak engine answer (latest facts, open items) — LLM + recall only if unresolved
     else clean and verified
