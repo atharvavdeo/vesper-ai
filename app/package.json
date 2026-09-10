@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
+    "@clerk/nextjs": "^7.9.2",
     "@livekit/components-react": "^2.9.24",
     "@livekit/components-styles": "^1.2.0",
     "better-sqlite3": "^13.0.3",
     "dotenv": "^17.4.2",
+    "driver.js": "^1.8.0",
     "livekit-client": "^2.22.3",
     "next": "16.3.4",
     "react": "19.2.8",
