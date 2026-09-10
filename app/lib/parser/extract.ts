@@ -211,6 +211,7 @@ export function extract(raw: string): Extraction {
   // --- attribute
   if (!ex.attribute) {
     const at: [RegExp, string][] = [
+      [/\b(stirrups?|rings?|ties?|lateral ties)\s*(ka|ki|ke)?\s*(dia|diameter|sariya|size)\b|\btie[_ ]dia\b/, "tie_dia"],
       [/\b(stirrups?|rings?|ties|lateral ties)\b(\s+(ki|ka))?\s*(spacing|doori|duri|gap|c\/c)?/, "stirrup_spacing"],
       [/\b(spacing|doori|duri|c\/c|centre to centre|center to center)\b/, "rebar_spacing"],
       [/\b(clear cover|cover|kavar)\b/, "cover"],

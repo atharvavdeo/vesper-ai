@@ -48,7 +48,11 @@ CREATE TABLE IF NOT EXISTS template_fields (
   unit          TEXT,
   is_mandatory  INTEGER NOT NULL DEFAULT 0,
   is_hold_point INTEGER NOT NULL DEFAULT 0, -- QA/QC hold point / permit blocker
-  code_ref      TEXT                        -- 'IS 456 Cl. 26.4'
+  code_ref      TEXT,                       -- 'IS 456 Cl. 26.4'
+  -- [added by data layer] extra detail from the site's embedded template JSON
+  item_ref      TEXT,                       -- site item/field id: 'B3', 'permit_no'
+  requirement   TEXT,                       -- code requirement text: 'Cl. 26.4.1 — Minimum cover ...'
+  acceptance    TEXT                        -- acceptance criteria / select options
 );
 CREATE INDEX IF NOT EXISTS idx_template_fields_tpl ON template_fields(template_id);
 
@@ -190,6 +194,43 @@ CREATE TABLE IF NOT EXISTS permit_checks (
   PRIMARY KEY (permit_id, field_id)
 );
 
+-- [added by data layer] QA/QC checklist state per element (e.g. QC-CON-CHK-001 pre-pour for L4 slab).
+-- hold_point_released=0 on an instance => any planned_activity at that location is a hold_point_blocker.
+CREATE TABLE IF NOT EXISTS checklist_instances (
+  instance_id   TEXT PRIMARY KEY,           -- 'CL-PP-L4-001'
+  project_id    TEXT NOT NULL REFERENCES projects(project_id),
+  template_id   TEXT NOT NULL REFERENCES templates(template_id),
+  location_id   TEXT REFERENCES locations(location_id),
+  element       TEXT,                       -- slab|column|beam ...
+  element_mark  TEXT,
+  drawing_id    TEXT REFERENCES drawings(drawing_id),
+  planned_activity TEXT,                    -- 'concrete_pour'
+  planned_for   TEXT,                       -- ISO date
+  status        TEXT NOT NULL,              -- Open|Hold|Released|Rejected
+  hold_point_released INTEGER NOT NULL DEFAULT 0,
+  inspected_by  TEXT,
+  inspected_on  TEXT,
+  released_by   TEXT,
+  released_at   TEXT,
+  notes         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_checklist_loc ON checklist_instances(location_id, status);
+
+CREATE TABLE IF NOT EXISTS checklist_items (
+  instance_id   TEXT NOT NULL REFERENCES checklist_instances(instance_id) ON DELETE CASCADE,
+  field_id      INTEGER NOT NULL REFERENCES template_fields(field_id),
+  item_ref      TEXT,                       -- 'B3'
+  section       TEXT,
+  label         TEXT NOT NULL,
+  is_mandatory  INTEGER NOT NULL DEFAULT 0,
+  is_hold_point INTEGER NOT NULL DEFAULT 0,
+  status        TEXT NOT NULL DEFAULT 'pending', -- OK|NC|NA|HOLD|pending (sign-off rows: verdict text)
+  remarks       TEXT,
+  checked_by    TEXT,
+  checked_at    TEXT,
+  PRIMARY KEY (instance_id, field_id)
+);
+
 -- ============================================================================
 -- 3. VOICE LAYER OUTPUT
 -- ============================================================================
@@ -277,3 +318,18 @@ CREATE VIEW IF NOT EXISTS v_current_facts AS
          (SELECT r.rfi_id FROM rfis r WHERE r.resulting_drawing_id = d.drawing_id LIMIT 1) AS via_rfi
   FROM drawing_facts f JOIN drawings d ON d.drawing_id = f.drawing_id
   WHERE d.is_latest = 1 AND d.status = 'For Construction';
+
+-- [added by data layer] Active permits with an unsatisfied mandatory check => permit_blocker
+CREATE VIEW IF NOT EXISTS v_permit_blockers AS
+  SELECT p.permit_id, p.permit_type, p.location_id, p.status, p.valid_from, p.valid_to, p.template_id,
+         c.field_id, c.label AS check_label
+  FROM permits p JOIN permit_checks c ON c.permit_id = p.permit_id
+  WHERE p.status = 'Active' AND c.is_mandatory = 1 AND c.satisfied = 0;
+
+-- [added by data layer] Checklist instances whose hold point is not released => hold_point_blocker
+CREATE VIEW IF NOT EXISTS v_open_hold_points AS
+  SELECT ci.instance_id, ci.template_id, ci.location_id, ci.element, ci.drawing_id, ci.planned_activity,
+         ci.planned_for, ci.status, ci.notes,
+         (SELECT COUNT(*) FROM checklist_items i WHERE i.instance_id = ci.instance_id AND i.status LIKE 'HOLD%') AS items_on_hold
+  FROM checklist_instances ci
+  WHERE ci.hold_point_released = 0;

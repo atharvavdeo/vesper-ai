@@ -65,8 +65,8 @@ html, body { background: #000000 !important; color: #ffffff; }
   --sec-y: clamp(96px, 11vw, 168px);
   --h2: clamp(34px, 4.3vw, 60px);
   --sec-lede: clamp(15.5px, 1.2vw, 17.5px);
-  --glass-bg: linear-gradient(160deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.015) 42%, rgba(140,150,170,0.045) 100%);
-  --glass-edge: linear-gradient(135deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.06) 32%, rgba(255,255,255,0.04) 62%, rgba(200,210,230,0.22) 100%);
+  --glass-bg: linear-gradient(160deg, rgba(255,255,255,0.085) 0%, rgba(255,255,255,0.022) 42%, rgba(140,150,170,0.06) 100%);
+  --glass-edge: linear-gradient(135deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.13) 30%, rgba(255,255,255,0.09) 62%, rgba(200,210,230,0.32) 100%);
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   --red: #ff5a4e;
   --amber: #f2b441;
@@ -601,11 +601,12 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
   border: 1px solid rgba(255,255,255,0.06);
   transform: translate(-50%, -50%);
 }
-.stage-rings i:nth-child(1) { width: 92%; height: 92%; border-style: dashed; border-color: rgba(255,255,255,0.07); }
-.stage-rings i:nth-child(2) { width: 62%; height: 62%; }
-.stage-rings i:nth-child(3) { width: 32%; height: 32%; border-color: rgba(255,255,255,0.1); }
+.stage-rings i { aspect-ratio: 1 / 1; }
+.stage-rings i:nth-child(1) { width: 92%; border-style: dashed; border-color: rgba(255,255,255,0.07); }
+.stage-rings i:nth-child(2) { width: 62%; }
+.stage-rings i:nth-child(3) { width: 32%; border-color: rgba(255,255,255,0.1); }
 .stage-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.stage-lines g { transform-origin: 50px 50px; transform: scale(var(--k)); }
+.stage-lines g { transform-origin: 50px 50px; transform: scale(var(--k), calc(var(--k) * var(--ly, 1))); }
 .stage-lines line {
   stroke: rgba(255,255,255,0.22);
   stroke-width: 0.18;
@@ -657,7 +658,7 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
   left: 50%;
   top: 50%;
   z-index: 3;
-  transform: translate(-50%, -50%) translate(calc(var(--x) * 1cqw * var(--k)), calc(var(--y) * 1cqw * var(--k)));
+  transform: translate(-50%, -50%) translate(calc(var(--x) * 1cqw * var(--k)), calc(var(--y) * 1cqw * var(--k) * var(--sy, 1)));
 }
 .src-chip {
   display: inline-flex;
@@ -697,10 +698,11 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
   border-radius: 12px;
   border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.015);
-  transition: border-color 0.5s ease, background 0.5s ease, box-shadow 0.5s ease, opacity 0.5s ease;
-  opacity: 0.55;
+  transition: border-color 0.5s ease, background 0.5s ease, box-shadow 0.5s ease;
   overflow: hidden;
 }
+.step > * { opacity: 0.5; transition: opacity 0.5s ease; }
+.step.active > * { opacity: 1; }
 .step::after {
   content: "";
   position: absolute;
@@ -714,7 +716,6 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
   transition: transform 0.8s var(--ease);
 }
 .step.active {
-  opacity: 1;
   border-color: rgba(220,220,220,0.4);
   background: linear-gradient(105deg, rgba(255,255,255,0.02), rgba(255,255,255,0.06) 60%, rgba(160,175,200,0.08));
   box-shadow: 0 0 30px rgba(170,200,255,0.07), inset 0 1px 0 rgba(255,255,255,0.1);
@@ -954,7 +955,7 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
   background: linear-gradient(105deg, #050505 0%, #2a2a2a 48%, #4a4a4a 100%);
 }
 .b-ico svg { width: 20px; height: 20px; color: #f3f3f3; }
-.h3 { font-size: clamp(20px, 1.7vw, 24px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.2; }
+.h3 { font-size: clamp(20px, 1.7vw, 24px); font-weight: 500; letter-spacing: -0.035em; line-height: 1.2; text-wrap: balance; }
 .b-card p { color: var(--muted); font-size: 14.5px; line-height: 1.6; letter-spacing: -0.012em; max-width: 520px; }
 .b-card .push { margin-top: auto; padding-top: 8px; }
 .readout {
@@ -1260,6 +1261,8 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
   #site-nav {
     position: fixed;
     inset: 0;
+    justify-self: stretch;
+    align-self: stretch;
     z-index: 45;
     flex-direction: column;
     justify-content: center;
@@ -1289,11 +1292,14 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
 @media (max-width: 640px) {
   .bento { grid-template-columns: minmax(0, 1fr); }
   .b-card { min-height: 0; }
+  .readout { font-size: 11px; line-height: 1.6; }
+  .readout div { grid-template-columns: 62px minmax(0, 1fr); white-space: normal; padding: 3px 0; }
   .truth { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-  .stage { --k: 0.84; }
-  .src-chip { font-size: 11px; padding: 7px 9px 7px 8px; gap: 7px; }
-  .src-chip svg { width: 13px; height: 13px; }
-  .src-chip small { font-size: 9.5px; }
+  .stage { --k: 0.84; --sy: 1.3; --ly: 1.04; aspect-ratio: 4 / 5; max-width: 440px; }
+  .src-chip { font-size: 10.5px; padding: 6px 8px 6px 7px; gap: 6px; border-radius: 7px; }
+  .src-chip svg { width: 12px; height: 12px; }
+  .src-chip small { display: none; }
+  .core-label { font-size: 10.5px; }
   .tpl { width: 250px; }
   .sc-card { padding: 22px 20px 20px; }
   .sc-head .sc-ctrls { display: none; }
@@ -1464,8 +1470,8 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
           <p class="sec-lede">Site managers work across a tender, a BOQ, a drawing register, RFIs, submittals, DPRs, permits and a phone full of WhatsApp voice notes. Every system unifies documents. None of them notice when they disagree.</p>
         </div>
         <div class="truths">
-          <div class="truth glass reveal" style="--d:0.05s"><span class="truth-k">Tendered</span><span class="truth-v">Column C-5 rebar spacing <strong>200 mm</strong> — drawing A-102, Rev 3</span></div>
-          <div class="truth glass reveal" style="--d:0.15s"><span class="truth-k">Built</span><span class="truth-v"><strong>180 mm</strong> on site — per A-102 Rev 4, issued 12 Aug after RFI-047</span></div>
+          <div class="truth glass reveal" style="--d:0.05s"><span class="truth-k">Tendered</span><span class="truth-v">Column C-5 rebar spacing <strong>200 mm</strong> — drawing A-102,&nbsp;Rev&nbsp;3</span></div>
+          <div class="truth glass reveal" style="--d:0.15s"><span class="truth-k">Built</span><span class="truth-v"><strong>180 mm</strong> on site — per A-102 Rev 4, issued 12&nbsp;Aug after RFI&#8209;047</span></div>
           <div class="truth glass alert-row reveal" style="--d:0.25s"><span class="truth-k">Reported</span><span class="truth-v">DPR voice note: “spacing as per drawing — <s>Rev 3</s>”</span></div>
         </div>
         <p class="truth-note reveal" style="--d:0.3s">Three truths about one column. Today the gap surfaces at <strong>rework, a payment dispute, or an incident</strong> — not when it’s spoken.</p>
@@ -1475,27 +1481,27 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
         <div class="stage-rings"><i></i><i></i><i></i></div>
         <svg class="stage-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
           <g>
-            <line x1="50" y1="50" x2="16" y2="18"/>
-            <line x1="50" y1="50" x2="74" y2="12" class="hot"/>
-            <line x1="50" y1="50" x2="88" y2="44"/>
-            <line x1="50" y1="50" x2="80" y2="80"/>
-            <line x1="50" y1="50" x2="50" y2="92" class="hot"/>
-            <line x1="50" y1="50" x2="18" y2="82"/>
-            <line x1="50" y1="50" x2="10" y2="50"/>
-            <line x1="50" y1="50" x2="44" y2="6"/>
+            <line x1="50" y1="50" x2="23" y2="21"/>
+            <line x1="50" y1="50" x2="77" y2="21" class="hot"/>
+            <line x1="50" y1="50" x2="87" y2="50"/>
+            <line x1="50" y1="50" x2="77" y2="79"/>
+            <line x1="50" y1="50" x2="50" y2="90" class="hot"/>
+            <line x1="50" y1="50" x2="23" y2="79"/>
+            <line x1="50" y1="50" x2="13" y2="50"/>
+            <line x1="50" y1="50" x2="50" y2="10"/>
           </g>
         </svg>
         <div class="core"><svg viewBox="0 0 24 24"><use href="#mark"/></svg></div>
         <div class="core-label">One memory · challenged by voice</div>
 
-        <div class="chip-pos" style="--x:-34;--y:-32" data-parallax="0.06"><span class="src-chip" style="--dur:5.2s"><svg><use href="#i-doc"/></svg><span>Tender / BOQ<small>CPWD item-rate</small></span></span></div>
-        <div class="chip-pos" style="--x:24;--y:-38" data-parallax="-0.05"><span class="src-chip" style="--dur:6.1s;--dl:-1s"><svg><use href="#i-layers"/></svg><span>Drawings<small class="bad">A-102 R3 ≠ R4</small></span></span></div>
-        <div class="chip-pos" style="--x:32;--y:-6" data-parallax="0.08"><span class="src-chip" style="--dur:5.6s;--dl:-2s"><svg><use href="#i-q"/></svg><span>RFIs<small>RFI-047 answered</small></span></span></div>
-        <div class="chip-pos" style="--x:28;--y:30" data-parallax="-0.07"><span class="src-chip" style="--dur:6.6s;--dl:-0.5s"><svg><use href="#i-stack"/></svg><span>Submittals<small>shop drawings</small></span></span></div>
+        <div class="chip-pos" style="--x:-27;--y:-29" data-parallax="0.06"><span class="src-chip" style="--dur:5.2s"><svg><use href="#i-doc"/></svg><span>Tender / BOQ<small>CPWD item-rate</small></span></span></div>
+        <div class="chip-pos" style="--x:27;--y:-29" data-parallax="-0.05"><span class="src-chip" style="--dur:6.1s;--dl:-1s"><svg><use href="#i-layers"/></svg><span>Drawings<small class="bad">A-102 R3 ≠ R4</small></span></span></div>
+        <div class="chip-pos" style="--x:37;--y:0" data-parallax="0.08"><span class="src-chip" style="--dur:5.6s;--dl:-2s"><svg><use href="#i-q"/></svg><span>RFIs<small>RFI-047 answered</small></span></span></div>
+        <div class="chip-pos" style="--x:27;--y:29" data-parallax="-0.07"><span class="src-chip" style="--dur:6.6s;--dl:-0.5s"><svg><use href="#i-stack"/></svg><span>Submittals<small>shop drawings</small></span></span></div>
         <div class="chip-pos" style="--x:0;--y:40" data-parallax="0.05"><span class="src-chip" style="--dur:5.9s;--dl:-3s"><svg><use href="#i-cal"/></svg><span>DPRs<small class="bad">“as per Rev 3”</small></span></span></div>
-        <div class="chip-pos" style="--x:-30;--y:32" data-parallax="-0.06"><span class="src-chip" style="--dur:6.3s;--dl:-1.6s"><svg><use href="#i-wave"/></svg><span>WhatsApp voice notes<small>0:42 · Hinglish</small></span></span></div>
-        <div class="chip-pos" style="--x:-36;--y:0" data-parallax="0.07"><span class="src-chip" style="--dur:5.4s;--dl:-2.4s"><svg><use href="#i-flame"/></svg><span>Permits<small>HWP-0112</small></span></span></div>
-        <div class="chip-pos" style="--x:-4;--y:-42" data-parallax="-0.04"><span class="src-chip" style="--dur:6.8s;--dl:-0.8s"><svg><use href="#i-list"/></svg><span>QA/QC checklists<small>hold points</small></span></span></div>
+        <div class="chip-pos" style="--x:-27;--y:29" data-parallax="-0.06"><span class="src-chip" style="--dur:6.3s;--dl:-1.6s"><svg><use href="#i-wave"/></svg><span>WhatsApp voice notes<small>0:42 · Hinglish</small></span></span></div>
+        <div class="chip-pos" style="--x:-37;--y:0" data-parallax="0.07"><span class="src-chip" style="--dur:5.4s;--dl:-2.4s"><svg><use href="#i-flame"/></svg><span>Permits<small>HWP-0112</small></span></span></div>
+        <div class="chip-pos" style="--x:0;--y:-40" data-parallax="-0.04"><span class="src-chip" style="--dur:6.8s;--dl:-0.8s"><svg><use href="#i-list"/></svg><span>QA/QC checklists<small>hold points</small></span></span></div>
       </div>
     </div>
   </section>
@@ -1980,14 +1986,13 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
     dockLinks.forEach(function (a) { map[a.getAttribute('href').slice(1)] = a; });
     var spy = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
         var a = map[en.target.id];
-        if (a && en.isIntersecting) {
-          dockLinks.forEach(function (l) { l.removeAttribute('aria-current'); });
-          a.setAttribute('aria-current', 'true');
-        }
+        dockLinks.forEach(function (l) { l.removeAttribute('aria-current'); });
+        if (a) a.setAttribute('aria-current', 'true');
       });
     }, { rootMargin: '-45% 0px -50% 0px' });
-    Object.keys(map).forEach(function (id) { var s = doc.getElementById(id); if (s) spy.observe(s); });
+    doc.querySelectorAll('.ext .section').forEach(function (s) { spy.observe(s); });
   }
 
   /* Scroll reveal */
@@ -2038,14 +2043,14 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
       p = Math.max(0, Math.min(1, p));
       var eased = 1 - Math.pow(1 - p, 3);
       var spread = window.innerWidth <= 640 ? 0.84 : 1;
-      stage.style.setProperty('--k', ((1.1 - eased * 0.36) * spread).toFixed(3));
+      stage.style.setProperty('--k', ((1.08 - eased * 0.22) * spread).toFixed(3));
     }
   }
   function onScroll() { if (!ticking) { ticking = true; requestAnimationFrame(frame); } }
   if (!RM) {
     // chips combine convergence (--k) with parallax (--py)
     doc.querySelectorAll('.chip-pos').forEach(function (c) {
-      c.style.transform = 'translate(-50%, calc(-50% + var(--py, 0px))) translate(calc(var(--x) * 1cqw * var(--k)), calc(var(--y) * 1cqw * var(--k)))';
+      c.style.transform = 'translate(-50%, calc(-50% + var(--py, 0px))) translate(calc(var(--x) * 1cqw * var(--k)), calc(var(--y) * 1cqw * var(--k) * var(--sy, 1)))';
     });
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll, { passive: true });
@@ -2141,7 +2146,7 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
         reset();
         await wait(900);
         setStep(1); show('user');
-        await type(uText, U, 34);
+        await type(uText, U, 27);
         await wait(450);
         setStep(2); setLive('check', 'Extracting'); mic.classList.remove('listening'); micLabel.textContent = 'Processing…';
         show('ents');
@@ -2154,7 +2159,7 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
         await wait(1500);
         setStep(4); setLive('alert', 'Speaking'); micLabel.textContent = 'Speak to interrupt';
         show('agent'); items.agent.classList.add('speaking');
-        await type(aText, A, 36);
+        await type(aText, A, 27);
         items.agent.classList.remove('speaking');
         await wait(350);
         setLive('alert', 'Awaiting decision'); micLabel.textContent = 'Tap to decide';
@@ -2268,7 +2273,7 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
     var cards = Array.prototype.slice.call(track.querySelectorAll('.sc-card'));
     var prev = doc.getElementById('sc-prev'), next = doc.getElementById('sc-next');
     var dotsWrap = doc.getElementById('sc-dots');
-    var idx = 0;
+    var idx = 0, lockUntil = 0;
     var dots = cards.map(function (c, i) {
       var b = doc.createElement('button');
       b.type = 'button'; b.className = 'dot-btn';
@@ -2283,6 +2288,7 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
       i = Math.max(0, Math.min(cards.length - 1, i));
       var pad = parseFloat(getComputedStyle(track).scrollPaddingLeft) || 0;
       var left = cards[i].offsetLeft - pad;
+      lockUntil = performance.now() + 700;
       track.scrollTo({ left: Math.min(left, maxScroll()), behavior: RM ? 'auto' : 'smooth' });
       setIdx(i);
     }
@@ -2297,11 +2303,14 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
     track.addEventListener('scroll', function () {
       if (st) cancelAnimationFrame(st);
       st = requestAnimationFrame(function () {
+        if (performance.now() < lockUntil) return;
         var pad = parseFloat(getComputedStyle(track).scrollPaddingLeft) || 0;
-        var x = track.scrollLeft + pad;
+        var m = maxScroll(), x = track.scrollLeft;
+        var pos = cards.map(function (c) { return Math.min(c.offsetLeft - pad, m); });
         var best = 0, bd = Infinity;
-        if (track.scrollLeft >= maxScroll() - 4) best = cards.length - 1;
-        else cards.forEach(function (c, j) { var d = Math.abs(c.offsetLeft - x); if (d < bd) { bd = d; best = j; } });
+        pos.forEach(function (p, j) { var d = Math.abs(p - x); if (d < bd - 1) { bd = d; best = j; } });
+        // several cards share the end position: keep the current one if it is among them
+        if (Math.abs(pos[idx] - pos[best]) < 2) best = idx;
         if (best !== idx) setIdx(best);
       });
     }, { passive: true });

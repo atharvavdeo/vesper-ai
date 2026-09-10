@@ -16,7 +16,18 @@ _PUSH = re.compile(r'self\.__next_f\.push\(\[1,"(.*?)"\]\)</script>', re.S)
 _DEC = json.JSONDecoder()
 
 
+def fix_mojibake(text: str) -> str:
+    """Pages fetched over plain HTTP without a charset header may be latin-1-decoded UTF-8."""
+    if text and ("â€" in text or "Ã" in text or "â\x80" in text):
+        try:
+            return text.encode("latin-1").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+    return text
+
+
 def decode_rsc(html: str) -> str:
+    html = fix_mojibake(html)
     out = []
     for c in _PUSH.findall(html or ""):
         try:
@@ -176,8 +187,13 @@ def kind_from_label(label: str, declared: str | None = None) -> str:
         return "date"
     if re.search(r"\(yes/no|\byes/no\b|\(y/n\)", l):
         return "yes_no"
-    if re.search(r"\((?:[\w .\-]+/){2,}[\w .\-]+\)", l) or re.search(r"\bstatus\b|\burgency\b|\btype\b", l):
+    if re.search(r"\(y/n(/na)?\)", l):
+        return "yes_no"
+    if (re.search(r"\((?:[\w .\-]+/){2,}[\w .\-]+\)", l) and not re.search(r"location|name|ref|address", l)) \
+            or re.search(r"\bstatus\b|\burgency\b|\btype\b", l):
         return "select"
+    if re.search(r"location|name|\bby\b|description|remarks|details|address", l):
+        return "text"
     if re.search(r"\b(qty|quantity|amount|rate|nos\.?|count|volume|weight|length|area|%|percentage|value|\(m3\)|\(m³\)|\(mm\)|\(kg\)|\(₹\)|rs\.?)\b", l):
         return "number"
     return declared and _KIND_BY_TYPE.get(declared, "text") or "text"
@@ -239,6 +255,14 @@ def template_fields(tpl: dict, template_id: str) -> list[dict]:
             lab = it.get("checkpoint") or it.get("label") or it.get("item") or it.get("description")
             req = it.get("is_requirement") or it.get("requirement")
             acc = it.get("acceptance_criteria") or it.get("acceptance")
+            mcol = re.match(r"^\s*Column\s+\d+\s*:\s*(.+?)\s+[—–-]\s+(.+)$", lab or "")
+            if mcol:  # register column definition -> a real register column
+                cname = mcol.group(1).strip()
+                cname_t = cname.title() if cname.isupper() else cname
+                add("Register columns", cname_t, kind_from_label(cname), unit_from_label(cname),
+                    bool(re.search(r"\bno\b|date|location|area|observation|status", cname.lower())), 0,
+                    clause_ref(it.get("is_code_ref"), req), it.get("item_id"), req, mcol.group(2).strip())
+                continue
             blob = " ".join(str(x) for x in (lab, req, acc) if x)
             opts = [o.upper() for o in (it.get("status_options") or [])]
             hold = bool(HOLD_RE.search(blob))
@@ -270,7 +294,8 @@ def template_fields(tpl: dict, template_id: str) -> list[dict]:
             kind = "signature" if re.search(r"sign|approval", lab, re.I) else kind_from_label(lab, f.get("type"))
             verdict = f.get("field_id") == "verdict" or "verdict" in lab.lower()
             hold = (verdict and is_checklist_like) or bool(re.search(r"approval \(if hold\)|release", lab, re.I))
-            add("Sign-off", lab, "select" if verdict else kind, None, f.get("required") is True or verdict, hold,
+            add("Sign-off", lab, "select" if verdict else kind, None,
+                f.get("required") is True or verdict or (permit and kind == "signature"), hold,
                 acc=" | ".join(so.get("verdict_options") or []) if verdict else None)
 
     # PMC shape: key_sections [{section_title, fields:[str]}]
@@ -283,10 +308,12 @@ def template_fields(tpl: dict, template_id: str) -> list[dict]:
             lab_s = str(lab)
             l = lab_s.lower()
             kind = kind_from_label(lab_s)
-            if permit and not re.search(r"header|project info", sec_l) and kind == "text" and not re.search(r"name|no\.|number|remarks|description|location|contractor|agency", l):
-                kind = "check_item"
+            question = lab_s.rstrip().endswith("?") or bool(re.search(r"\(y/n(/na)?\)", l))
+            if question and not re.search(r"header|project info", sec_l):
+                kind = "check_item"  # checklist question on a PMC form/permit ("... ? (Y/N)")
             mand = bool(re.search(r"\b(no\.|number|date|location|gridline|drawing no|revision|rev\.? no|status|raised by|subject)\b", l)) \
-                or (permit and not re.search(r"remarks|attached|photo", l)) or bool(MANDATORY_RE.search(lab_s))
+                or (permit and (kind in ("check_item", "signature") or bool(re.search(r"permit no|validity|location|fire watch", l)))) \
+                or bool(MANDATORY_RE.search(lab_s))
             hold = bool(HOLD_RE.search(lab_s)) or (permit and bool(PERMIT_CRITICAL_RE.search(lab_s)))
             add(stitle, lab_s, kind, unit_from_label(lab_s), mand, hold, None)
     return rows

@@ -143,6 +143,11 @@ export function check(slots: Slots, repo: Repo, confirmed: Set<SlotName> = new S
     if (!facts.length && attr === "stirrup_spacing") { attr = "rebar_spacing"; facts = repo.currentFacts(r.location.location_id, attr); }
     if (spokenDrawing && facts.length > 1) facts = facts.filter((f) => f.drawing_number === spokenDrawing).concat(facts.filter((f) => f.drawing_number !== spokenDrawing));
     r.attribute = attr;
+    const elements = [...new Set(facts.map((f) => f.element))];
+    if (!slots.element && elements.length > 1) {
+      r.missing.push({ kind: "missing_critical_field", severity: "clarify", detail: "element ambiguous", evidence: { field: "element", candidates: elements } });
+      facts = [];
+    }
     if (facts.length) {
       const f = facts[0];
       r.fact = f;

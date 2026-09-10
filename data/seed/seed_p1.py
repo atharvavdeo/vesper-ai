@@ -399,7 +399,7 @@ PERMITS = [
     {"permit_id": "EXC-0034", "permit_type": "excavation", "location_id": "P1:STP:GL",
      "valid_from": "2026-09-08T08:00", "valid_to": "2026-09-12T18:00", "status": "Suspended",
      "issued_by": "S. Deshmukh (Site In-charge)", "template_pref": ["QC-HSE-PRM-005"],
-     "unsatisfied_keywords": ["shoring", "shore", "benching", "barricad"]},
+     "unsatisfied_keywords": ["shoring"]},
 ]
 
 # Pre-pour checklist instance for L4 slab: hold point NOT released.

@@ -19,7 +19,7 @@ export interface PermitBlock {
   permit_id: string; permit_type: string; location_id: string | null; status: string;
   unsatisfied: { label: string; field_id: number }[];
 }
-export interface HoldPointBlock { source: string; ref: string; template_id: string | null; location_id: string | null; items: { label: string; code_ref?: string | null }[] }
+export interface HoldPointBlock { source: string; ref: string; template_id: string | null; location_id: string | null; notes?: string | null; items: { label: string; code_ref?: string | null }[] }
 
 const norm = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[\s\-_/]/g, "");
 
@@ -54,7 +54,10 @@ export class Repo {
     if (q.grid) {
       c = c.filter((l) => norm(l.grid) === norm(q.grid) || aliasHit(l, q.grid) || norm(l.location_id.split(":")[1]) === norm(q.grid));
     } else if (q.zone) {
-      c = c.filter((l) => norm(l.zone) === norm(q.zone) || aliasHit(l, q.zone) || norm(l.location_id.split(":")[1]) === norm(q.zone));
+      // prefer the zone-level location row (grid NULL, e.g. P1:ZoneB:L3) over every grid inside the zone
+      const inZone = c.filter((l) => norm(l.zone) === norm(q.zone) || aliasHit(l, q.zone) || norm(l.location_id.split(":")[1]) === norm(q.zone));
+      const zoneRows = inZone.filter((l) => !l.grid || norm(l.location_id.split(":")[1]) === norm(q.zone));
+      c = zoneRows.length ? zoneRows : inZone;
     } else if (q.element === "slab") {
       c = c.filter((l) => norm(l.grid) === "slab" || /slab/i.test(l.location_id));
     } else {
@@ -132,10 +135,22 @@ export class Repo {
   }
 
   // ------------------------------------------------------------ permits
+  /** A location plus the zone-level location that contains it (P1:C-5:L3 → P1:ZoneB:L3). */
+  relatedLocationIds(locationId: string): string[] {
+    const l = this.db.prepare(`SELECT * FROM locations WHERE location_id = ?`).get(locationId) as LocationRow | undefined;
+    const ids = [locationId];
+    if (l?.zone && l.level) {
+      const z = this.db.prepare(`SELECT location_id FROM locations WHERE project_id = ? AND grid IS NULL AND zone = ? AND level = ?`).all(this.projectId, l.zone, l.level) as { location_id: string }[];
+      for (const r of z) if (!ids.includes(r.location_id)) ids.push(r.location_id);
+    }
+    return ids;
+  }
+
   permitBlockers(locationId: string, activity: string): { blocks: PermitBlock[]; activePermits: string[]; noPermit: boolean } {
+    const ids = this.relatedLocationIds(locationId);
     const permits = this.db.prepare(
-      `SELECT * FROM permits WHERE project_id = ? AND permit_type = ? AND (location_id = ? OR location_id IS NULL)`
-    ).all(this.projectId, activity, locationId) as { permit_id: string; permit_type: string; location_id: string | null; status: string }[];
+      `SELECT * FROM permits WHERE project_id = ? AND permit_type = ? AND (location_id IN (${ids.map(() => "?").join(",")}) OR location_id IS NULL)`
+    ).all(this.projectId, activity, ...ids) as { permit_id: string; permit_type: string; location_id: string | null; status: string }[];
     const active = permits.filter((p) => p.status === "Active");
     const blocks: PermitBlock[] = [];
     for (const p of active) {
@@ -162,21 +177,26 @@ export class Repo {
       const itemFk = ["instance_id", "checklist_id"].find((c) => items.includes(c));
       if (idCol && itemFk) {
         const locCol = inst.includes("location_id") ? "location_id" : null;
+        const ids = this.relatedLocationIds(locationId);
         const rows = (locCol
-          ? this.db.prepare(`SELECT * FROM checklist_instances WHERE ${locCol} = ?`).all(locationId)
+          ? this.db.prepare(`SELECT * FROM checklist_instances WHERE ${locCol} IN (${ids.map(() => "?").join(",")})`).all(...ids)
           : this.db.prepare(`SELECT * FROM checklist_instances`).all()) as Record<string, unknown>[];
         const holdCol = items.includes("is_hold_point") ? "is_hold_point" : null;
         const releaseExpr = this.releaseExpr(items);
         for (const r of rows) {
           const status = String(r.status ?? "").toLowerCase();
           if (["released", "closed", "approved", "complete", "completed"].includes(status)) continue;
+          if (inst.includes("hold_point_released") && Number(r.hold_point_released) === 1) continue;
           const its = this.db.prepare(
             `SELECT * FROM checklist_items WHERE ${itemFk} = ? ${holdCol ? `AND ${holdCol} = 1` : ""} AND NOT (${releaseExpr})`
           ).all(r[idCol]) as Record<string, unknown>[];
           if (its.length) {
             out.push({
               source: "checklist", ref: String(r[idCol]), template_id: (r.template_id as string) ?? null, location_id: (r.location_id as string) ?? null,
-              items: its.map((i) => ({ label: String(i.label ?? i.item ?? i.description ?? "Hold point"), code_ref: (i.code_ref as string) ?? null })),
+              notes: (r.notes as string) ?? null,
+              items: its
+                .sort((a, b) => Number(/^hold/i.test(String(b.status ?? ""))) - Number(/^hold/i.test(String(a.status ?? ""))))
+                .map((i) => ({ label: String(i.label ?? i.item ?? i.description ?? "Hold point"), code_ref: (i.code_ref as string) ?? null })),
             });
           }
         }
@@ -187,7 +207,7 @@ export class Repo {
   private releaseExpr(cols: string[]): string {
     const parts: string[] = [];
     for (const c of ["released", "satisfied", "is_released", "checked", "ok", "done"]) if (cols.includes(c)) parts.push(`COALESCE(${c},0) = 1`);
-    if (cols.includes("status")) parts.push(`LOWER(COALESCE(status,'')) IN ('released','ok','done','yes','pass','passed','approved','complete','completed','satisfied')`);
+    if (cols.includes("status")) parts.push(`LOWER(COALESCE(status,'')) IN ('released','ok','done','yes','pass','passed','approved','complete','completed','satisfied','na','n/a')`);
     if (cols.includes("released_at")) parts.push(`released_at IS NOT NULL AND released_at <> ''`);
     return parts.length ? parts.join(" OR ") : "0";
   }

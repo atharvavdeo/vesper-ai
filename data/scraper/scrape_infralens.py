@@ -119,7 +119,7 @@ def fetch_http(url: str):
     import requests
     r = requests.get(url, headers={"User-Agent": UA}, timeout=40)
     r.raise_for_status()
-    return "", [], {"statusCode": r.status_code, "sourceURL": url}, r.text
+    return "", [], {"statusCode": r.status_code, "sourceURL": url}, r.content.decode("utf-8", "replace")
 
 
 def fetch(app, name: str, url: str, force: bool = False, allow_http: bool = True) -> bool:
