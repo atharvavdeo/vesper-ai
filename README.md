@@ -125,9 +125,13 @@ grounded facts, contradictions and writes all come from the engine via typed too
 ## 5. Run It Locally
 
 **Prereqs:** Python 3.12+, Node 20+, a Chromium browser, and a filled-in `.env`
-(`RIME_API_KEY`, `GROQ_API_KEY`, `NVIDIA_API_KEY`, `LIVEKIT_*`).
+(`RIME_API_KEY`, `GROQ_API_KEY`, `NVIDIA_API_KEY`, `LIVEKIT_*`). Start from the
+placeholder-only template; never put credentials in source code or client-side variables.
 
 ```bash
+# 0 — configure local secrets (the copied file remains gitignored)
+cp .env.example .env
+
 # 1 — build the project database (idempotent: run twice, get the same DB)
 python3 data/build_db.py
 
@@ -272,3 +276,80 @@ good" — it's **zero wrong logs**.
 <div align="center">
 <sub>Built for DataForge × Rime · Demo script in <a href="./DEMO.md">DEMO.md</a> · Data notes in <a href="./data/DATA.md">DATA.md</a></sub>
 </div>
+
+---
+
+## 7. Rime voice contract and evidence
+
+The organizer configuration is locked to **model `arcana`**, **speaker `astra`**, and
+**language `hin`**. Vesper sends an HTTPS `POST` with JSON and Bearer authentication to
+`https://users.rime.ai/v1/rime-tts`, requests `audio/mp3`, and returns `audio/mpeg` from
+`POST /api/tts` to one browser `<audio>` element. The API key stays server-side.
+
+Run the non-secret preflight before a demo or deployment:
+
+```bash
+python3 scripts/rime_preflight.py --env-file backend/.env.local
+python3 scripts/rime_preflight.py --env-file backend/.env.local --request
+```
+
+The full claim, procedure, tested result, and limitations are in
+[RIME_EVIDENCE.md](./RIME_EVIDENCE.md).
+
+## 8. Third-party services and failure behavior
+
+| Service | Purpose | Failure behavior |
+| --- | --- | --- |
+| Rime | Spoken agent responses | `/api/tts` returns an error; the Talk screen falls back to browser speech synthesis and shows a missing/unavailable Rime status. |
+| Groq | Whisper STT and LLM fallback | A failed STT request is surfaced to the user; typed observations remain available. |
+| NVIDIA NIM | Optional primary LLM assist | The deterministic engine continues; Groq is the configured fallback. |
+| LiveKit Cloud | Full-duplex browser/worker voice transport | Token minting fails clearly if configuration is missing; typed Talk mode remains available. |
+| SpeechBrain sidecar | Manager speaker verification | Logging is locked when the speaker cannot be verified or the sidecar is unavailable. |
+
+## 9. Authentication and deployment
+
+Clerk is the account-authentication layer: `/` remains public and `/app` is protected by
+`app/proxy.ts`. After sign-in the console shows the Clerk account menu. The voice enrollment
+service is deliberately a **step-up control**, not the only identity factor: speech can be
+replayed or misclassified, so a verified account remains required for access.
+
+Each signed-in account receives exactly **three** complimentary commands across typed chat,
+push-to-talk, and a new LiveKit room. The FastAPI service verifies the Clerk JWT and atomically
+tracks the allowance in SQLite before it processes a command. After the third command, the UI
+shows a thank-you state and retains the conversation archive; refreshes and concurrent tabs
+cannot add a fourth command. Set `CLERK_JWT_ISSUER` and `FREE_COMMAND_LIMIT=3` in Render.
+
+The deployment is split by workload:
+
+| Host | Services | Why |
+| --- | --- | --- |
+| Vercel | `app/` Next.js frontend | Edge delivery and Clerk-protected browser console |
+| Render | FastAPI API, private VoiceID sidecar, persistent LiveKit agent worker | The API needs a writable data disk; the agent must stay connected to LiveKit; the model sidecar stays off the public internet |
+
+`render.yaml` is the repeatable Render Blueprint and `voiceid/Dockerfile` includes its required
+FFmpeg runtime. Create the Render Blueprint from this repository, set every `sync: false` value
+in Render's secret manager, then copy the resulting API URL into Vercel as
+`NEXT_PUBLIC_API_BASE` and redeploy the frontend. Do not store keys in `render.yaml`, Vercel
+source files, or Git.
+
+For a CLI deployment after the host accounts are authenticated:
+
+```bash
+# Vercel frontend (run from the Next app)
+cd app && npx vercel --prod
+
+# Render validates the infrastructure file; create/sync the Blueprint in Render
+render blueprints validate render.yaml
+```
+
+## 10. Known limitations before production deployment
+
+- The current backend acceptance harness passes all 10 scenarios with zero wrong logs. It is a
+  scripted test, not a substitute for a site pilot.
+- Browser STT now distinguishes invalid/unfinalized audio (`422`) from a provider failure
+  (`502`/`503`/`504`); valid WAV transcription succeeds against Groq. More real-device samples
+  are still useful before production.
+- Desktop, tablet, and mobile browser layout checks pass. A full physical-phone LiveKit
+  conversation validation remains pending.
+- The Rime proxy buffers the upstream response; it is not true chunked audio streaming.
+- Rime, Groq, NVIDIA, and LiveKit are external services: credentials, quota, latency, and network availability affect live behavior.
