@@ -1,196 +1,226 @@
-# Parallel build plan — vesper-ai MVP (~1.5 h)
+# vesper-ai — build plan
 
-Voice-led operational memory for construction site managers. Speech cross-references a
-spoken field observation against tender/BOQ, drawing revisions, RFIs, submittals and DPRs,
-then **challenges and confirms before logging**. Contradiction detection is the core
-feature; voice is the safety gate; **speaker ID gates logging** (non-negotiable).
+Voice-led operational memory for construction site managers. A spoken field observation is
+cross-referenced against the drawing register, RFIs, permits and QA/QC hold points, then the
+agent **challenges and confirms before anything is logged**. Contradiction detection is
+deterministic (safety core). The spoken conversation around it is a real-time full-duplex
+voice agent. Speaker ID ("persona") gates every logging action.
 
-## Decisions (locked)
+---
 
-| Question | Decision |
-|---|---|
-| Backend engine | **Fresh minimal Python engine** in `backend/`, using `../DataForge-Rime/agent/` (working 1316-line reasoning loop, reads `site.db`) and `app/lib/*.ts` as reference only |
-| Frontend | **Keep the Next.js `app/`**, talking to the Python API |
-| Parallelism | **Dir-partitioned parallel subagents** on one working tree, frozen interface contract between them |
-| LLM | **NVIDIA NIM on** for entity 2nd-opinion + Hinglish challenge phrasing, **deterministic parser fallback** on any error/timeout |
-| Speaker ID | Gate logging. Reference: github.com/Inference-LAB/VocalID — MVP uses its core model (SpeechBrain ECAPA-TDNN) directly with cosine similarity vs one enrolled speaker |
+## ✅ DONE (v1 — text/REST build, keep as the logic + acceptance core)
 
-## Data status — DONE
+- **Data layer** — `data/site.db` built, repeatable, verified. `data/DATA.md`. Templates
+  100/300/150. All 10 scenarios have backing data.
+- **Deterministic engine** (`backend/engine/`, `backend/db.py`) — **KEEP, this is the
+  "logical layer":**
+  - `extract.py` — Hinglish/English entity extraction with confidence
+  - `contradictions.py` — 6 rules vs DB views (`revision_mismatch`, `dimension_mismatch`,
+    `unknown_drawing`, `missing_critical_field`, `permit_blocker`, `hold_point_blocker`),
+    each with evidence (issue date, RFI, code clause)
+  - `db.py` — read layer (`repo.ts` port) + `persist.py` writes with the SAFETY GATE
+    (re-verifies drawing = latest For-Construction, location exists, unit present,
+    contradiction was spoken, before any write)
+  - `llm.py` — NVIDIA NIM → Groq fallback slot-filler
+- **Acceptance** — `backend/scenarios.py` → **10/10 scenarios pass, 0 wrong
+  drawing/dimension/location logs**. Runs via CLI and `POST /api/scenarios/run`.
+- **Backend** (`backend/main.py`, FastAPI/uvicorn :8000) — session/turn/decision,
+  observations, scenarios, drawings/rfis/permits, **Rime TTS proxy** (`/api/tts`, model
+  `coda`, speaker `nadi`, verified real MP3), **Groq Whisper STT** (`/api/stt`),
+  speaker enroll/status proxy (`/api/voice/*`).
+- **voiceid sidecar** (`voiceid/`, FastAPI :8788) — SpeechBrain ECAPA-TDNN, `/enroll`
+  `/verify` `/health`, live in-browser enrollment flow. **KEEP.**
+- **Frontend** (`app/`, Next :3000) — Observations / Scenarios / Enroll screens **KEEP**.
+- Env, `run-all.sh`, `backend/run.sh`, `voiceid/run.sh`, READMEs, `DEMO.md`.
 
-`data/site.db` built, verified, repeatable (`python3 data/build_db.py` twice = identical).
-All 10 scenarios (S01–S10) have backing data — see `data/DATA.md`. Templates 100/300/150.
-S01 fact path: `P1:C-5:L3 / rebar_spacing → A-102@R4 | 180 mm | ±10 | RFI-047 | IS 456 Cl. 26.5.3.2(c)`.
-Known gap (acceptable): ~311 of 550 templates are header-only (scrape stopped at ~200/523);
-no scenario touches them.
+---
 
-## Directory partition (no two workstreams touch the same files)
+## ⚠️ WRONG in v1 — what this rebuild fixes
 
-| Dir | WS | Contents |
+| Problem | Cause | Fix |
 |---|---|---|
-| `backend/` | A | FastAPI: fresh engine (extract, contradictions, dialogue, replies, persist), NIM LLM, all `/api/*` routes, Rime TTS proxy, reads `data/site.db` |
-| `voiceid/` | B | Speaker-ID sidecar (already scaffolded: `app.py`, `requirements.txt`) — venv, model, service, enroll script |
-| `app/` | C | Next.js frontend: Talk / Observations / Scenarios screens, mic + barge-in, TTS playback |
-| `backend/tests/` | D | Python scenario runner (S01–S10) + parser unit tests |
-| `.env`, `data/` | me | done; frozen |
+| **Can't talk to it — mic times out before mouse release** | hold-to-talk + `webkitSpeechRecognition` no-speech/`network` timeout on Linux Chromium; `onPointerLeave` ends the turn | Full-duplex voice agent (LiveKit). Click once → converse. VAD + turn detection, not press-and-hold. |
+| **Not a conversation / not full duplex** | request/response `/api/turn` per utterance | LiveKit `AgentSession`: continuous mic, streaming STT, barge-in, agent speaks while listening |
+| **Responses are hard-coded** | `backend/engine/replies.py` fixed Hinglish templates | LLM **response composer** grounded ONLY in the tool result (DB facts + contradiction output). Templates deleted; thin factual fallback kept for LLM-down. |
+| **Not clearly "extract from DB then answer"** | logic is there but buried behind templates | Explicit agent tool `resolve_and_check(utterance)` → returns `{slots, facts, contradictions, blockers, allowed_decisions}` from the deterministic engine; LLM must speak only from that. |
 
-## Frozen interface contract
+`backend/engine/dialogue.py` (the FSM) and `replies.py` (templates) are **replaced**.
+Everything else under `backend/engine/` + `db.py` + `voiceid/` + `data/` is **reused unchanged**.
 
-To be written verbatim to `backend/CONTRACT.md` in Phase 0. Nobody deviates.
+---
 
-### Backend API — `http://localhost:8000`
-
-```
-GET  /api/health              -> {db, llm, rime, voiceid}
-POST /api/session             -> {sessionId}
-POST /api/turn   multipart {sessionId, text, bargeIn?, audio?}
-     -> {state, entities[], contradictions[], blockers[], missing[],
-         reply:{text,speech}, allowedDecisions[], slots{},
-         resolved:{drawing_id, location_id, fact}, speaker:{match,score}|null}
-POST /api/decision  {sessionId, decision}
-     -> {state, logged:{observation_id?, rfi_id?, decision}|null, reply:{text,speech}}
-GET  /api/observations        -> [{observation_id, location_id, drawing_id, attribute,
-                                   value_claimed, unit, final_decision, contradiction_kinds, created_at}]
-GET  /api/observations/{id}   -> full row + evidence
-GET  /api/scenarios           -> [{id, title}]
-POST /api/scenarios/run       -> {results:[{id, title, pass, failures[], kindsSeen[],
-                                   clarified, finalDecision, logged[], transcript[]}]}
-POST /api/tts    {text}       -> audio/mpeg  (503 if RIME_API_KEY missing -> frontend uses SpeechSynthesis)
-```
-
-### Speaker-ID sidecar — `http://localhost:8788` (backend proxies)
+## 🎯 Target architecture
 
 ```
-GET  /health              -> {status, enrolled, threshold}
-POST /enroll  files=[wav] -> {enrolled, samples, cohesion}
-POST /verify  file=wav    -> {match, score, threshold}
+┌─ browser (app/) ───────────────┐        ┌─ LiveKit server ─┐
+│ @livekit/components-react      │  WebRTC │  room  (audio)   │
+│  "Start conversation" button   │◄───────►│                  │
+│  mic (continuous) + agent audio│        └─────────┬────────┘
+│  live transcript, cards        │                  │ joins as agent
+└────────────────────────────────┘                  ▼
+                                   ┌─ agent worker (Python, livekit-agents) ─────────────┐
+                                   │ AgentSession:                                        │
+                                   │   VAD          silero  (speech start/end, barge-in)  │
+                                   │   turn detect  livekit turn-detector (semantic EOT)  │
+                                   │   STT          Groq Whisper (streaming)              │
+                                   │   LLM          NVIDIA NIM / Groq  + TOOLS:           │
+                                   │                  • resolve_and_check(utterance)      │──► backend/engine/  (extract + contradictions)
+                                   │                  • log_observation / raise_rfi /     │──► backend/engine/persist.py  (SAFETY GATE)
+                                   │                    raise_ncr / stop_work             │
+                                   │                  system prompt: speak ONLY from tool │
+                                   │                  results; Hinglish; name drawing/rev/│
+                                   │                  date/RFI/numbers; end by asking      │
+                                   │   TTS          Rime (coda/nadi)  via plugin or       │──► existing /api/tts logic
+                                   │                custom adapter                        │
+                                   │   PERSONA GATE buffer each user utterance's PCM →    │──► voiceid /verify
+                                   │                if not enrolled manager, decision      │
+                                   │                tools refuse + LLM says "locked"       │
+                                   └─────────────────────────────────────────────────────┘
 ```
 
-### Gate rule
+- **Deterministic engine stays the source of truth.** The LLM never invents a fact, a
+  revision, an allowed decision, or a log — it calls tools and phrases their output.
+- **Persona voice-ID** runs async per utterance so it never blocks the conversation; the
+  gate is enforced only when a decision tool is called.
+- Text path (`/api/turn`, `/api/decision`, scenario runner) **stays** — it's the
+  acceptance harness and the noisy-room fallback.
 
-On `/api/turn` with `audio`, backend calls `/verify`. If `SPEAKER_ID_ENABLED=true` and
-`match=false` -> `allowedDecisions` returned as `[]` plus a `speaker_gate` entry in
-`blockers`; `/api/decision` returns 403 for any logging decision. Typed-only turns
-(no audio) skip the gate — the typed box is the trusted operator console / noisy-room
-fallback. **(Open item 1 — confirm.)**
+---
 
-## Hard rules (enforced in dialogue.py AND re-checked in persist.py)
+## Prerequisites
 
-1. Never log without first SPEAKING the challenge for every contradiction.
-2. Never log an unconfirmed or low-confidence slot (incl. anything only the LLM suggested).
-3. The logged `drawing_id` MUST be the verified latest For-Construction revision.
-4. While a permit or hold-point blocker is open, only `stop_work`, `raise_ncr`, `cancel`
-   are allowed.
+**LiveKit server** — pick one:
+- **Self-host (recommended for the demo, no signup):**
+  `docker run --rm -p 7880:7880 -p 7881:7881 -p 7882:7882/udp livekit/livekit-server --dev`
+  → `LIVEKIT_URL=ws://localhost:7880`, `LIVEKIT_API_KEY=devkey`, `LIVEKIT_API_SECRET=secret`
+- **LiveKit Cloud (free tier):** create a project → `LIVEKIT_URL=wss://<proj>.livekit.cloud`,
+  `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
 
-Critical fields (certain before logging): location, drawing_number, dimension_claimed
-(plus element / attribute / value / drawing clarity).
+**New deps**
+- Python (new `agent/` venv): `livekit-agents`, `livekit-plugins-silero`,
+  `livekit-plugins-groq` (STT+LLM) or `livekit-plugins-openai` (point at NVIDIA/Groq base
+  URLs), `livekit-plugins-turn-detector`, `livekit-plugins-rime` (if present; else custom TTS)
+- Frontend: `@livekit/components-react`, `livekit-client`
 
-## Contradiction rules (`backend/engine/contradictions.py`, vs DB views)
+**Env additions**
+```
+LIVEKIT_URL=ws://localhost:7880
+LIVEKIT_API_KEY=devkey
+LIVEKIT_API_SECRET=secret
+AGENT_STT=groq            # groq | deepgram
+AGENT_LLM=nvidia          # nvidia | groq
+AGENT_TTS=rime
+```
 
-| kind | triggers when |
-|---|---|
-| `revision_mismatch` | spoken revision != latest |
-| `dimension_mismatch` | spoken value outside drawing tolerance |
-| `unknown_drawing` | drawing number not in register |
-| `missing_critical_field` | location/element/attribute/value/drawing unclear |
-| `permit_blocker` | active permit has an unsatisfied mandatory check (`v_permit_blockers`) |
-| `hold_point_blocker` | pre-pour hold point not released (`v_open_hold_points`) |
-
-Each result carries evidence: date issued, the RFI behind the revision, the code clause.
+---
 
 ## Phases
 
-### Phase 0 — me, ~10 min (blocking, serial)
-- Write `backend/CONTRACT.md`.
-- Scaffold `backend/`: `main.py` (FastAPI + all routes, typed stubs), `db.py` (site.db
-  read helpers + views), `config.py` (loads root `.env`), `requirements.txt`.
-- Leave everything uncommitted.
+### Phase 0 — stopgap so the current build is usable (~15 min, independent of LiveKit)
+- `app/components/TalkScreen.tsx`: hold-to-talk → **click-to-toggle** (click start, click
+  stop), drop `onPointerLeave` stop, no implicit timeout. Server STT (`/api/stt`) already
+  wired. This makes v1 demoable while the voice agent is built.
 
-### Phase 1 — 3 subagents in parallel + me, ~50 min
-- **WS-B (haiku subagent)** — `voiceid/`: create `python3.12` venv, `pip install -r
-  requirements.txt`, pre-download ECAPA model, start service, smoke-test `/health`
-  `/enroll` `/verify` with generated WAVs. Fully independent — starts immediately.
-- **WS-A (sonnet subagent)** — `backend/engine/`: `extract.py` (Hinglish slots +
-  confidence), `contradictions.py` (6 rules vs views), `dialogue.py` (state machine +
-  4 hard rules), `replies.py` (fixed Hinglish templates, Roman script, name drawing /
-  revision / issue date / RFI / numbers, end by asking manager to choose),
-  `persist.py` (voice_sessions/turns incl. was_barge_in; field_observations linked to
-  QC-SPW-REG-004; RFI row status Open on raise_rfi). `llm.py` = NVIDIA NIM
-  (OpenAI-compatible, `NVIDIA_BASE_URL`), deterministic fallback on error/timeout.
-  Wire into the Phase-0 routes.
-- **WS-C (sonnet subagent)** — `app/`: strip default scaffold; build against
-  `CONTRACT.md` with a local mock. **Talk** screen (push-to-talk mic,
-  `webkitSpeechRecognition` continuous + partials + en-IN/hi-IN toggle, typed fallback,
-  live transcript + chips `C-5 · column · 180 mm · A-102 · R3`, red contradiction card /
-  amber blocker card, reply bubble with waveform, decision buttons, barge-in = stop
-  `<audio>` on `onspeechstart`/first partial and mark `bargeIn:true`, `MediaRecorder`
-  blob -> `/api/turn`). **Observations** (list + detail: drawing rev, RFI, contradiction
-  kinds). **Scenarios** (calls `/api/scenarios/run`, pass/fail table + transcript). TTS
-  via `/api/tts` through one `<audio>` element; SpeechSynthesis hi-IN fallback + "Rime
-  key missing" badge. API base from `NEXT_PUBLIC_API_BASE`.
-- **Me** — Rime `/api/tts` proxy (verify endpoint at docs.rime.ai; historically
-  `POST https://users.rime.ai/v1/rime-tts`, `Authorization: Bearer`, `Accept: audio/mp3`,
-  body `{text, speaker, modelId: arcana, lang: hi}`; stream through; small LRU;
-  clear error when key missing) + `/api/scenarios/run` runner glue + integrate WS-A on
-  landing + review subagent output.
+### Phase A — LiveKit transport up (~45 min)
+- `agent/` dir: new `python3.12` venv, `livekit-agents` deps.
+- `agent/worker.py` — minimal `AgentSession` that joins a room and echoes/repeats. Prove
+  audio in+out.
+- `backend/main.py`: `POST /api/rtc/token` → LiveKit JWT for a room (uses `LIVEKIT_*`).
+- `app/components/ConversationScreen.tsx` — `LiveKitRoom` + `RoomAudioRenderer` +
+  `<BarVisualizer>`; one "Start conversation" button → fetch token → connect. Replaces the
+  Talk tab.
+- **Gate:** you click Start, speak, hear the echo. Full-duplex path proven.
 
-### Phase 2 — me + 1 subagent, ~20 min
-- **WS-D (sonnet subagent)** — `backend/tests/`: `run_scenarios.py` (copy `site.db` ->
-  temp, play S01–S10 turn-by-turn through the engine, print pass/fail table; PASS = all
-  10 behave AND no observation ever logged with the wrong drawing / dimension /
-  location) + `test_extract.py` unit tests.
-- **Me** — run it, fix engine bugs until 10/10 green. Then live end-to-end through the
-  real frontend: S01 (revision mismatch -> log R4), S03 (barge-in C-5 -> C-6), S05
-  (hot-work blocked -> stop work); confirm Observations shows `A-102@R4`.
+### Phase B — conversational pipeline (~40 min)
+- Add to `AgentSession`: `silero` VAD, turn detector, Groq Whisper STT, Rime TTS (plugin or
+  a ~40-line custom `TTS` wrapping the existing Rime call), a plain LLM.
+- Live partial transcription surfaced to the frontend via LiveKit transcription events.
+- **Gate:** natural back-and-forth; interrupting the agent stops its speech within ~300 ms.
 
-### Phase 3 — ~10 min
-- Enroll the manager voice (`voiceid/enroll.py voiceid/samples/*.wav`), set
-  `SPEAKER_ID_ENABLED=true`, verify a wrong-speaker voice turn gets gated.
-- `app/README.md` + root run instructions (3 processes: `voiceid` :8788, `backend`
-  :8000, `app` :3000).
-- Rehearse the 3-min demo: S01 revision mismatch -> S03 barge-in -> S05 hot-work blocked
-  -> show Observations log + scenario pass table.
+### Phase C — logical layer, no hard-coded responses (~50 min)
+- `agent/tools.py`:
+  - `resolve_and_check(utterance, session_state)` → calls `engine.extract` +
+    `engine.contradictions.check` against `db.Repo`; returns a compact JSON of
+    `{slots, resolved_facts, contradictions[], blockers[], missing[], allowed_decisions[]}`.
+  - `log_observation / raise_rfi / raise_ncr / stop_work` → `engine.persist.*` (unchanged
+    SAFETY GATE; raises → tool returns the refusal reason for the LLM to speak).
+- `agent/prompt.py` — system prompt: *"You are Vesper, a QC assistant on an Indian
+  construction site. You may ONLY state drawing numbers, revisions, dates, RFI numbers and
+  measurements that appear in a tool result. Never guess. Speak Hinglish in Roman script.
+  When there is a contradiction, name the latest drawing + revision + issue date + the RFI
+  + the numbers, then ask the manager to choose (log / RFI / NCR). Before any log, you must
+  have spoken the contradiction. If a decision tool returns a refusal, read it out."*
+- **Delete `backend/engine/replies.py` templates**; `backend/main.py` `/api/turn` uses the
+  same composer (LLM) with a **thin factual fallback** (one sentence from the tool result,
+  no template prose) when the LLM errors/times out.
+- Update `backend/scenarios.py`: assert each scenario's `challenge_mentions`
+  (e.g. `R4`, `RFI-047`, `180`) appear in the composed reply; keep the hard invariants
+  (0 wrong logs, contradiction spoken before log). Target: **still 10/10.**
 
-## Env (root `.env`, gitignored)
+### Phase D — persona voice-ID in the pipeline (~35 min)
+- In the agent, capture each finished user utterance's audio (LiveKit gives the user track;
+  buffer PCM between VAD start/end) → encode → `POST voiceid /verify`.
+- Keep `session.speaker_ok` (bool + score), refreshed per utterance, non-blocking.
+- The `log_observation / raise_rfi / raise_ncr / stop_work` tools check `session.speaker_ok`
+  first; if false → return `"speaker not verified as <enrolled manager>; logging locked"` →
+  LLM speaks it. Conversation continues; only writes are gated.
+- Enrollment: the existing **Enroll** tab (records 3 clips → `/api/voice/enroll`) is reused.
+  Add a one-line "who am I hearing?" indicator in the Conversation screen from the latest
+  `verify` score.
+- Tune `SPEAKER_ID_THRESHOLD` with the real enrolled voice vs a second person.
 
-```
-SITE_DB_PATH=../data/site.db
-RIME_API_KEY=...            # NEEDED by Phase 3 (frontend has SpeechSynthesis fallback)
-RIME_MODEL=arcana
-RIME_SPEAKER=...            # Hindi / Indian-English speaker, pick from docs.rime.ai
-RIME_LANG=hi
-NVIDIA_API_KEY=...          # PRESENT
-NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
-NVIDIA_LLM_MODEL=meta/llama-3.3-70b-instruct
-GROQ_API_KEY=...            # optional fallback LLM
-GROQ_BASE_URL=https://api.groq.com/openai/v1
-GROQ_LLM_MODEL=llama-3.3-70b-versatile
-CRITICAL_FIELDS=location,drawing_number,dimension_claimed
-SPEAKER_ID_ENABLED=true
-SPEAKER_ID_URL=http://localhost:8788
-SPEAKER_ID_THRESHOLD=0.70
-SPEAKER_ID_MODEL_DIR=./voiceid/models
-```
+### Phase E — polish + demo (~30 min)
+- Observation / contradiction cards in the Conversation screen: agent publishes a data
+  message (`{type:"state", contradictions, resolved, allowed}`) after each
+  `resolve_and_check`; frontend renders the red/amber cards + decision chips (chips also
+  trigger the same tools by sending a data message back).
+- Observations / Scenarios / Enroll tabs unchanged (REST).
+- `run-all.sh` gains the LiveKit server + `agent/worker.py`.
+- Rehearse: S01 revision mismatch → interrupt mid-reply (S03) → S05 hot-work blocked →
+  Observations + `POST /api/scenarios/run` table.
 
-## Open items — need decision (not blocking Phase 0 / Phase 1 start)
+---
 
-1. **Typed input bypasses the speaker gate** (voice turns gated, typed console trusted) —
-   confirm, or gate typed input too.
-2. **Backend Python = `python3.12`** (`~/.local/bin/python3.12`; system `python3` is 3.14
-   with no torch/speechbrain wheels) — confirm.
-3. **Keys:** `NVIDIA_API_KEY` present. Need `RIME_API_KEY` + a Hindi-capable
-   `RIME_SPEAKER` by Phase 3. `GROQ_API_KEY` optional.
-4. **Voice enrollment:** 3× ~6-second WAV clips of the manager speaking (quiet room),
-   dropped in `voiceid/samples/`. Needed Phase 3.
-5. **`app/lib/` TS engine** — leave in place as dead reference, or delete so the repo has
-   one engine.
+## What stays / what changes
 
-## Demo (3 min, live mic)
+| Reused unchanged | Replaced | New |
+|---|---|---|
+| `data/` (schema, build_db, site.db, scenarios) | `backend/engine/dialogue.py` (FSM) | `agent/` — LiveKit worker, tools, prompt |
+| `backend/engine/extract.py`, `contradictions.py` | `backend/engine/replies.py` (templates) | `POST /api/rtc/token` |
+| `backend/engine/persist.py` + safety gate, `db.py` | `app/components/TalkScreen.tsx` (push-to-talk) | `app/components/ConversationScreen.tsx` (LiveKit) |
+| `voiceid/` sidecar + Enroll tab | live path's browser `webkitSpeechRecognition` | LiveKit server (self-host or Cloud) |
+| `backend/scenarios.py` (assertions extended) | | |
+| `backend/main.py` `/api/turn` `/api/decision` (text/fallback + acceptance) | | |
+| Rime `/api/tts`, Groq `/api/stt` (reused by the agent TTS/STT) | | |
 
-S01 revision mismatch -> S03 barge-in -> S05 hot-work blocked -> show Observations log +
-scenario pass table.
+---
 
-## Acceptance
+## Hard rules (unchanged — enforced in `persist.py` gate AND the agent tools)
 
-`python backend/tests/run_scenarios.py` — plays S01–S10 against a temp copy of `site.db`,
-prints a pass/fail table. PASS = all 10 behave as expected AND no observation is ever
-logged with the wrong drawing, dimension or location.
+1. Never log without having SPOKEN the challenge for every contradiction.
+2. Never log an unconfirmed / low-confidence slot (incl. LLM-only suggestions).
+3. Logged `drawing_id` MUST be the verified latest For-Construction revision.
+4. While a permit / hold-point blocker is open: only `stop_work`, `raise_ncr`, `cancel`.
+5. **New:** a logging tool runs only if the current speaker is the enrolled manager.
+
+---
+
+## Acceptance (updated)
+
+- `backend/scenarios.py` — S01–S10 through the **new composer** (text mode): all 10 behave,
+  0 wrong drawing/dimension/location logs, every `challenge_mentions` token present, every
+  contradiction spoken before its log.
+- Live: click Start → speak S01 → agent challenges from DB facts (not a template) → say
+  "log kar do" → `field_observations` row linked to `A-102@R4` → interrupt the agent
+  mid-sentence and it stops → a second person's voice cannot log.
+
+---
+
+## Open items
+
+1. **LiveKit:** self-host (`--dev`, no keys) or Cloud (keys)? Default: self-host.
+2. **STT:** Groq Whisper (have key, ~300–600 ms) or Deepgram (free tier, true streaming)?
+   Default: Groq.
+3. **Turn-taking feel:** semantic turn-detector (best) needs a model download (~messages);
+   fallback is VAD silence timeout. Default: try turn-detector, fall back to VAD.
+4. Keep `/api/turn` text path for the noisy-room fallback? Default: yes.

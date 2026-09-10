@@ -1,0 +1,4 @@
+livekit-agents[groq,silero,turn-detector]
+livekit-plugins-openai
+livekit-plugins-rime
+python-dotenv

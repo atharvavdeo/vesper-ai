@@ -1,69 +1,114 @@
-import Image from "next/image";
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { api, type Health } from "@/lib/api";
+import TalkScreen from "@/components/TalkScreen";
+import ObservationsScreen from "@/components/ObservationsScreen";
+import ScenariosScreen from "@/components/ScenariosScreen";
+import EnrollScreen from "@/components/EnrollScreen";
+
+// Isolated: LiveKit is browser-only and heavy. A failure here must not take
+// down the rest of the app, so it's client-only and lazily loaded.
+const ConversationScreen = dynamic(
+  () => import("@/components/ConversationScreen"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="p-4 text-sm text-zinc-400">Loading live voice…</div>
+    ),
+  },
+);
+
+type Tab = "talk" | "live" | "observations" | "scenarios" | "enroll";
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "talk", label: "Talk" },
+  { key: "live", label: "Live" },
+  { key: "observations", label: "Observations" },
+  { key: "scenarios", label: "Scenarios" },
+  { key: "enroll", label: "Enroll" },
+];
 
 export default function Home() {
+  const [tab, setTab] = useState<Tab>("talk");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [voiceEnrolled, setVoiceEnrolled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .createSession()
+      .then((r) => {
+        if (!cancelled) setSessionId(r.sessionId);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setSessionError(`Session start failed: ${e.message}`);
+      });
+    api
+      .health()
+      .then((h) => {
+        if (!cancelled) setHealth(h);
+      })
+      .catch(() => {
+        /* health is best-effort */
+      });
+    api
+      .voiceStatus()
+      .then((s) => {
+        if (!cancelled) setVoiceEnrolled(s.enrolled);
+      })
+      .catch(() => {
+        /* voice status is best-effort */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onEnrolledChange = useCallback(
+    (enrolled: boolean) => setVoiceEnrolled(enrolled),
+    [],
+  );
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+    <div className="app-shell">
+      <main className="flex-1">
+        {tab === "talk" ? (
+          <TalkScreen
+            sessionId={sessionId}
+            health={health}
+            sessionError={sessionError}
+            voiceEnrolled={voiceEnrolled}
+            onGoToEnroll={() => setTab("enroll")}
+          />
+        ) : null}
+        {tab === "live" ? <ConversationScreen /> : null}
+        {tab === "observations" ? <ObservationsScreen /> : null}
+        {tab === "scenarios" ? <ScenariosScreen /> : null}
+        {tab === "enroll" ? (
+          <EnrollScreen onEnrolledChange={onEnrolledChange} />
+        ) : null}
       </main>
+
+      <nav className="fixed inset-x-0 bottom-0 mx-auto flex max-w-[430px] border-t border-zinc-800 bg-black">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex-1 py-3 text-sm font-medium ${
+              tab === t.key ? "text-zinc-100" : "text-zinc-500"
+            }`}
+          >
+            {t.label}
+            {tab === t.key ? (
+              <span className="mx-auto mt-1 block h-0.5 w-8 rounded bg-zinc-100" />
+            ) : null}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

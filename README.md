@@ -25,19 +25,50 @@ permits, QA/QC checklists; then use real-time speech to **query, challenge and c
 5. User decides → `field_observations` row linked to verified `drawing_id`, `location_id`, decision.
    Critical field uncertain → agent refuses to log and asks.
 
+## Architecture (3 processes, no LiveKit / no WebRTC transport)
+```
+app/       Next.js frontend (:3000)  — Talk / Observations / Scenarios / Enroll screens
+                                        STT = browser webkitSpeechRecognition
+                                        mic capture / speaker-ID audio = getUserMedia + MediaRecorder
+                                        TTS playback = <audio> from /api/tts, speechSynthesis fallback
+backend/   FastAPI on uvicorn (:8000) — deterministic Hinglish engine (extract → contradictions →
+                                        dialogue state machine → replies → persist), reads data/site.db,
+                                        NVIDIA NIM (Groq fallback) for entity 2nd-opinion + phrasing,
+                                        Rime TTS proxy, speaker-gate, scenario runner
+voiceid/   FastAPI on uvicorn (:8788) — SpeechBrain ECAPA-TDNN speaker verification vs one enrolled
+                                        manager (cosine similarity). Gates all logging.
+```
+
+## Run
+```bash
+python3 data/build_db.py          # build data/site.db (idempotent; run twice = identical)
+./run-all.sh                      # starts voiceid :8788, backend :8000, frontend :3000
+#   or individually:  ./voiceid/run.sh   ./backend/run.sh   (cd app && npm run dev)
+```
+First `voiceid` boot downloads the ECAPA model (~80 MB) once. Then open http://localhost:3000,
+go to **Enroll**, record 3 live voice samples, then use **Talk**.
+
 ## Acceptance test
-8–10 scripted scenarios with deliberate errors + barge-in. Pass = zero observations logged with wrong drawing
-ref or dimension; every contradiction produced a spoken clarification. (`data/seed/scenarios.json`, runner in `app/`.)
+10 scripted scenarios (S01–S10) with deliberate errors + barge-in. Pass = all 10 behave as
+expected AND zero observations logged with the wrong drawing / dimension / location; every
+contradiction produced a spoken clarification first.
+```bash
+cd backend && PYTHONPATH=. .venv/bin/python scenarios.py     # CLI pass/fail table
+#  or:  POST http://localhost:8000/api/scenarios/run
+```
 
 ## Layout
 ```
 data/schema.sql          SQLite schema (shared contract)
-data/scraper/            Firecrawl scraper for infralens.in (Formats 100, QA/QC 300, PMC 150)
-data/seed/               Demo project (drawings, facts, RFIs, BOQ, permits) + scenarios.json
-data/site.db             Built database (python3 data/build_db.py)
+data/build_db.py         Builds site.db from raw/ + seed/
+data/seed/               Demo project P1 + scenarios.json (S01–S10)
+data/site.db             Built database
+data/DATA.md             Build steps, row counts, sanity checks, known gaps
+backend/CONTRACT.md      Frozen HTTP + engine interface (all workstreams build to this)
+backend/engine/          extract · contradictions · dialogue · replies · llm (ported from the TS reference)
+voiceid/                 Speaker-ID sidecar + enroll.py
 landing/index.html       Marketing landing page
-app/                     Mobile-first voice app (Next.js) — Rime TTS + Web Speech ASR + contradiction engine
-.env                     FIRECRAWL_API_KEY, RIME_API_KEY, ANTHROPIC_API_KEY (never commit)
+.env                     SITE_DB_PATH, RIME_*, NVIDIA_*, GROQ_*, SPEAKER_ID_*  (gitignored, never commit)
 ```
 
 ## Demo project contract (seed data — app + scenarios depend on these exact IDs)

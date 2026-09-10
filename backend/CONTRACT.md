@@ -67,7 +67,16 @@ POST /api/tts                json {text}
 
 GET  /api/drawings  /api/rfis  /api/permits
   -> list rows (Memory screen; thin)
+
+GET  /api/voice/status
+  -> {enabled:bool, reachable:bool, enrolled:bool, threshold?:float}
+
+POST /api/voice/enroll        multipart/form-data, field `files` repeated (>=1 audio blob)
+  -> {enrolled:bool, samples:int, dims:int, cohesion:float}   (proxied to voiceid /enroll)
 ```
+
+STT: browser Web Speech API (`webkitSpeechRecognition`) over the WebRTC mic capture
+(`getUserMedia`/`MediaRecorder`). No server-side STT, no LiveKit.
 
 Gate: `/api/turn` with `audio` -> backend POSTs it to voiceid `/verify`. If
 `SPEAKER_ID_ENABLED=true` and `match=false`: response `allowedDecisions=[]` and a

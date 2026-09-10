@@ -1,0 +1,108 @@
+"""Live voice profiling for the agent.
+
+Subscribes to the manager's mic track, keeps a rolling ~6 s PCM buffer, and verifies
+it against the enrolled speaker (voiceid sidecar = SpeechBrain ECAPA-TDNN, open source).
+Updates Brain.speaker_ok / speaker_score, which the decision tools gate on.
+"""
+from __future__ import annotations
+
+import asyncio
+import io
+import logging
+import os
+import struct
+import time
+
+import httpx
+from livekit import rtc
+
+logger = logging.getLogger("vesper.voice")
+
+SR = 16000
+WINDOW_SEC = 6
+VERIFY_EVERY_SEC = 4.0
+SPEAKER_ID_URL = os.getenv("SPEAKER_ID_URL", "http://localhost:8788").rstrip("/")
+ENABLED = os.getenv("SPEAKER_ID_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _pcm16_to_wav(pcm: bytes, sample_rate: int = SR) -> bytes:
+    n = len(pcm)
+    hdr = b"RIFF" + struct.pack("<I", 36 + n) + b"WAVE"
+    hdr += b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, sample_rate, sample_rate * 2, 2, 16)
+    hdr += b"data" + struct.pack("<I", n)
+    return hdr + pcm
+
+
+class VoiceProfiler:
+    def __init__(self, brain, on_update=None) -> None:
+        self.brain = brain
+        self.on_update = on_update            # async callable(dict) -> publish to browser
+        self._buf = bytearray()
+        self._max = SR * 2 * WINDOW_SEC       # int16
+        self._task: asyncio.Task | None = None
+        self._last_verify = 0.0
+        self._closed = False
+
+    def attach(self, room: rtc.Room) -> None:
+        if not ENABLED:
+            logger.info("voice profiling disabled")
+            return
+
+        @room.on("track_subscribed")
+        def _on_track(track, pub, participant):
+            if isinstance(track, rtc.RemoteAudioTrack):
+                logger.info("voice profiling: capturing %s", participant.identity)
+                self._task = asyncio.create_task(self._consume(track))
+
+    async def _consume(self, track: rtc.Track) -> None:
+        stream = rtc.AudioStream(track, sample_rate=SR, num_channels=1)
+        try:
+            async for ev in stream:
+                if self._closed:
+                    break
+                self._buf.extend(ev.frame.data.tobytes())
+                if len(self._buf) > self._max:
+                    del self._buf[: len(self._buf) - self._max]
+                now = time.monotonic()
+                if now - self._last_verify >= VERIFY_EVERY_SEC and len(self._buf) >= SR * 2 * 2:
+                    self._last_verify = now
+                    asyncio.create_task(self.verify_now())
+        finally:
+            await stream.aclose()
+
+    async def verify_now(self) -> None:
+        pcm = bytes(self._buf)
+        if len(pcm) < SR * 2:  # < 1 s
+            return
+        wav = _pcm16_to_wav(pcm)
+        try:
+            async with httpx.AsyncClient(timeout=6.0) as cx:
+                r = await cx.post(f"{SPEAKER_ID_URL}/verify",
+                                  files={"file": ("turn.wav", wav, "audio/wav")})
+            if r.status_code == 200:
+                j = r.json()
+                self.brain.speaker_ok = bool(j.get("match"))
+                self.brain.speaker_score = float(j.get("score", 0.0))
+            elif r.status_code == 409:      # nobody enrolled yet -> don't lock the demo
+                self.brain.speaker_ok = True
+                self.brain.speaker_score = None
+            else:
+                self.brain.speaker_ok = True
+                self.brain.speaker_score = None
+        except Exception as e:
+            logger.warning("verify failed: %s", e)
+            return
+        if self.on_update:
+            try:
+                await self.on_update({
+                    "type": "speaker",
+                    "match": self.brain.speaker_ok,
+                    "score": self.brain.speaker_score,
+                })
+            except Exception:
+                pass
+
+    async def aclose(self) -> None:
+        self._closed = True
+        if self._task:
+            self._task.cancel()

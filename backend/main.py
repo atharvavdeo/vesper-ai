@@ -7,7 +7,7 @@ import os
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -75,6 +75,103 @@ def health() -> dict:
         "voiceid": voiceid_ok,
         "engine": ENGINE_READY,
     }
+
+
+# ---------------------------------------------------------------- LiveKit room token
+@app.post("/api/rtc/token")
+async def rtc_token(request: Request) -> dict:
+    """Mint a LiveKit access token so the browser can join a room. The agent worker
+    joins the same room automatically (dispatched by the LiveKit server)."""
+    lk_url = os.getenv("LIVEKIT_URL", "").strip()
+    lk_key = os.getenv("LIVEKIT_API_KEY", "").strip()
+    lk_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
+    if not (lk_url and lk_key and lk_secret) or lk_url.startswith("<"):
+        raise HTTPException(503, "LiveKit not configured (LIVEKIT_URL/API_KEY/API_SECRET)")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    import uuid as _uuid
+
+    from livekit.api import AccessToken, VideoGrants
+
+    identity = (body or {}).get("identity") or f"manager-{_uuid.uuid4().hex[:8]}"
+    room = (body or {}).get("room") or f"{os.getenv('AGENT_ROOM_PREFIX', 'vesper')}-{_uuid.uuid4().hex[:8]}"
+    tok = (
+        AccessToken(lk_key, lk_secret)
+        .with_identity(identity)
+        .with_name((body or {}).get("name") or "Site Manager")
+        .with_grants(VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True))
+    )
+    return {"url": lk_url, "token": tok.to_jwt(), "room": room, "identity": identity}
+
+
+# ---------------------------------------------------------------- STT (Groq Whisper fallback)
+@app.post("/api/stt")
+async def stt(file: UploadFile = File(...), language: str = Form("")):
+    """Server-side speech-to-text. Browser webkitSpeechRecognition fails on most Linux
+    Chromium builds ('network' error); the frontend records with MediaRecorder and posts
+    the blob here. Uses Groq's free Whisper endpoint (OpenAI-compatible)."""
+    if not config.GROQ_ENABLED:
+        return JSONResponse({"error": "no STT provider (GROQ_API_KEY missing)"}, status_code=503)
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(422, "empty audio")
+    data = {"model": os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo"),
+            "response_format": "json", "temperature": "0"}
+    if language:
+        data["language"] = language
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as cx:
+            r = await cx.post(
+                f"{config.GROQ_BASE_URL}/audio/transcriptions",
+                headers={"Authorization": f"Bearer {config.GROQ_API_KEY}"},
+                data=data,
+                files={"file": (file.filename or "turn.webm", raw,
+                                file.content_type or "audio/webm")})
+        if r.status_code != 200:
+            return JSONResponse({"error": f"groq {r.status_code}", "detail": r.text[:300]},
+                                status_code=502)
+        return {"text": (r.json().get("text") or "").strip()}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+
+# ---------------------------------------------------------------- speaker enrollment
+@app.get("/api/voice/status")
+async def voice_status() -> dict:
+    if not config.SPEAKER_ID_ENABLED:
+        return {"enabled": False, "enrolled": False, "reachable": False}
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as cx:
+            r = await cx.get(f"{config.SPEAKER_ID_URL}/health")
+        j = r.json() if r.status_code == 200 else {}
+        return {"enabled": True, "reachable": r.status_code == 200,
+                "enrolled": bool(j.get("enrolled")), "threshold": j.get("threshold")}
+    except Exception as e:
+        return {"enabled": True, "reachable": False, "enrolled": False, "error": str(e)}
+
+
+@app.post("/api/voice/enroll")
+async def voice_enroll(request: Request):
+    """Forward N live audio clips to the voiceid sidecar to (re)enroll the site manager."""
+    if not config.SPEAKER_ID_ENABLED:
+        raise HTTPException(409, "speaker id disabled")
+    form = await request.form()
+    files = form.getlist("files") or ([form["file"]] if "file" in form else [])
+    if not files:
+        raise HTTPException(422, "no audio clips")
+    payload = []
+    for f in files:
+        raw = await f.read()
+        payload.append(("files", (getattr(f, "filename", "clip.webm"), raw,
+                                  getattr(f, "content_type", None) or "application/octet-stream")))
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as cx:
+            r = await cx.post(f"{config.SPEAKER_ID_URL}/enroll", files=payload)
+        return JSONResponse(r.json(), status_code=r.status_code)
+    except Exception as e:
+        raise HTTPException(502, f"voiceid enroll failed: {e}")
 
 
 # ---------------------------------------------------------------- session
