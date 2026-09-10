@@ -156,8 +156,9 @@ provider can no longer leave the live conversation silent.
   </tr>
 </table>
 
-Try it without signing in at **`/demo`**: the full console on recorded engine output, with a
-guided tour. The spoken walkthrough and every screenshot are in [DEMO.md](DEMO.md).
+Try it without signing in at **[vesper-ai.pages.dev/demo](https://vesper-ai.pages.dev/demo/)**
+(or `/demo` locally): the full console on recorded engine output, with Vesper's voice pre-rendered
+by Rime (mistv3 · cove) and a guided tour. The spoken walkthrough and every screenshot are in [DEMO.md](DEMO.md).
 
 ## Measured voice result
 
@@ -438,10 +439,13 @@ in Render's secret manager, then copy the resulting API URL into Vercel as
 `NEXT_PUBLIC_API_BASE` and redeploy the frontend. Do not store keys in `render.yaml`, Vercel
 source files, or Git.
 
-The public landing is currently deployed to Cloudflare Pages at
-[vesper-ai.pages.dev](https://vesper-ai.pages.dev). It is intentionally a landing-only deployment:
-it does **not** host the FastAPI, VoiceID or persistent LiveKit worker, so it must not be used as
-the live console URL.
+The public link, [vesper-ai.pages.dev](https://vesper-ai.pages.dev), is a **static, key-free
+build**: the landing page plus the full `/demo` console. The demo replays recorded engine output
+with pre-rendered Rime audio and the guided tour. It holds no Clerk keys, no backend and no API keys, and
+"Launch App" opens the demo. Build and deploy it with `scripts/build_static_demo.sh deploy`
+(`STATIC_DEMO=1` exports only `*.static.tsx` routes and aliases `@clerk/nextjs` to a stub). The
+build fails if anything secret-shaped appears in the output. The live voice console still needs
+the backend, VoiceID and agent services below.
 
 Cloudflare can host the full product through a Worker gateway plus Containers, but the configured
 account must have Workers Paid/Containers access and Docker must be running to build/publish the

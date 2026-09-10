@@ -7,7 +7,7 @@ Two ways to show it:
 
 | | What | Needs |
 | --- | --- | --- |
-| **Recorded demo** | [`/demo`](http://localhost:3000/demo) — the full console on recorded engine output, with a guided tour | Nothing. No sign-in, no keys, nothing is written. |
+| **Recorded demo** | [vesper-ai.pages.dev/demo](https://vesper-ai.pages.dev/demo/) (or `/demo` locally): the full console on recorded engine output, with pre-rendered Rime audio and a guided tour | Nothing. No sign-in, no keys, nothing is written. |
 | **Live demo** | `/app` — real voice over LiveKit, Rime speech, speaker-ID gate | Backend, agent, voiceid, keys (see README §5) |
 
 Every reply in the recorded demo is **real engine output**: `scripts/build_demo_data.py` runs the
@@ -159,6 +159,8 @@ writes are locked until your voice is verified.
 ## Refresh the recorded demo and screenshots
 
 ```bash
+backend/.venv/bin/python scripts/build_demo_audio.py     # pre-render demo replies with Rime (key stays local)
+scripts/build_static_demo.sh deploy                      # key-free static site -> vesper-ai.pages.dev
 backend/.venv/bin/python scripts/build_demo_data.py      # regenerate app/lib/demo-data.json
 python3 scripts/capture_screens.py http://localhost:3000  # docs/media/screens/*.jpg (needs Chrome)
 python3 scripts/capture_screens.py http://localhost:3000 tour   # just the tour shots
