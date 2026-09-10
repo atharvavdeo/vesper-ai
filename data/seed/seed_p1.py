@@ -1,5 +1,5 @@
 """
-Demo project P1 seed — "Tower B, Residential G+12, Hinjewadi, Pune".
+Demo project P1 seed — "Pithoragarh District Hospital & Staff Quarters, Uttarakhand".
 
 Single source of truth for the demo project. build_db.py imports `build_seed()` and also dumps the
 result to data/seed/project_p1.json (human-readable mirror; do not hand-edit the JSON).
@@ -15,9 +15,9 @@ from __future__ import annotations
 
 PROJECT = {
     "project_id": "P1",
-    "name": "Tower B, Residential G+12, Hinjewadi, Pune",
-    "client": "Sahyadri Habitat Developers LLP",
-    "location": "Hinjewadi Phase 2, Pune, Maharashtra",
+    "name": "Pithoragarh District Hospital & Staff Quarters",
+    "client": "Uttarakhand Health Infrastructure Development Agency",
+    "location": "Pithoragarh, Uttarakhand",
     "contract_type": "Item Rate (CPWD)",
     "start_date": "2026-03-02",
 }
@@ -30,6 +30,7 @@ _LETTER = {
     "B": ["B", "bee", "बी"],
     "C": ["C", "see", "सी"],
     "D": ["D", "dee", "डी"],
+    "E": ["E", "ee", "ई"],
 }
 _NUM = {
     1: ["1", "one", "ek", "वन", "एक"],
@@ -90,6 +91,14 @@ def locations() -> list[dict]:
          "aliases": ["lift pit", "lift pit B1", "lift ka pit", "basement lift pit", "लिफ्ट पिट", "LP-1"]},
         {"location_id": "P1:STP:GL", "project_id": "P1", "grid": "STP", "level": "GL", "zone": "External",
          "aliases": ["STP", "STP pit", "sewage treatment plant", "S T P excavation", "एसटीपी", "STP ka khudai"]},
+        {"location_id": "P1:E-1:L1", "project_id": "P1", "grid": "E-1", "level": "L1", "zone": "OPD",
+         "aliases": _grid_aliases("E", 1) + ["OPD block", "outpatient block", "OPD column E-1", "Pithoragarh OPD"]},
+        {"location_id": "P1:E-2:L1", "project_id": "P1", "grid": "E-2", "level": "L1", "zone": "Maternity",
+         "aliases": _grid_aliases("E", 2) + ["maternity wing", "labour room block", "OPD column E-2"]},
+        {"location_id": "P1:RW-1:GL", "project_id": "P1", "grid": "RW-1", "level": "GL", "zone": "Hillside",
+         "aliases": ["retaining wall", "retaining wall one", "RW-1", "RW 1", "hillside retaining wall", "ambulance road wall"]},
+        {"location_id": "P1:WaterTank:GL", "project_id": "P1", "grid": "WT-1", "level": "GL", "zone": "Services",
+         "aliases": ["water tank", "overhead water tank", "WT-1", "WT 1", "hospital water tank"]},
     ]
     return locs
 
@@ -192,6 +201,14 @@ def drawings() -> list[dict]:
         "ZoneB", "L3", 1, None, "Sleeve positions for soil/waste stacks in Zone B.")
     add("E-501", "R1", "Level 4 Slab Electrical Conduit Layout", "MEP", "For Approval", "2026-09-02",
         None, "L4", 0, None, "Issued for approval; conduit routing in L4 slab (RFI-050 open).")
+    add("A-201", "R1", "OPD & Maternity Block — Structural GA", "Structural", "For Construction", "2026-08-26",
+        "OPD", "L1", 1, None, "Pithoragarh hospital OPD and maternity block: M30 columns, 40 mm cover, Fe500D reinforcement.")
+    add("C-401", "R1", "Ambulance Road Retaining Wall & Drain", "Civil", "Superseded", "2026-08-19",
+        "Hillside", "GL", 0, "C-401@R2", "Initial toe-wall detail before geotechnical review.")
+    add("C-401", "R2", "Ambulance Road Retaining Wall & Drain", "Civil", "For Construction", "2026-09-04",
+        "Hillside", "GL", 1, None, "Wall base widened after geotechnical review; weep holes and filter media mandatory (RFI-060).")
+    add("P-601", "R1", "Hospital Water Supply & Fire Tank Layout", "Public Health", "For Construction", "2026-09-01",
+        "Services", "GL", 1, None, "Underground fire/water tank sleeves and pump-room connections for remote-site continuity.")
     return D
 
 
@@ -250,6 +267,16 @@ def drawing_facts() -> list[dict]:
     # --- M-401 sleeves in Zone B -----------------------------------------------------------
     f("M-401@R1", "P1:ZoneB:L3", "pipe", "SL-B3-01", "size", 150, None, "mm", 0, "IS 1742 (soil stack sleeve)")
     f("M-401@R1", "P1:ZoneB:L3", "pipe", "SL-B3-02", "size", 100, None, "mm", 0, "IS 1742 (waste stack sleeve)")
+    # --- Pithoragarh hospital block ---------------------------------------------------------
+    for loc, mark in (("P1:E-1:L1", "E-1"), ("P1:E-2:L1", "E-2")):
+        f("A-201@R1", loc, "column", mark, "rebar_spacing", 150, None, "mm", 10, "IS 456 Cl. 26.5.3.2(c)")
+        f("A-201@R1", loc, "column", mark, "rebar_dia", 20, None, "mm", 0, "IS 456 Cl. 26.5.3.1; IS 1786")
+        f("A-201@R1", loc, "column", mark, "cover", 40, None, "mm", 5, "IS 456 Cl. 26.4")
+        f("A-201@R1", loc, "column", mark, "grade", 30, "M30", "MPa", 0, "IS 456 Table 5")
+    f("C-401@R1", "P1:RW-1:GL", "wall", "RW-1", "thickness", 300, None, "mm", 10, "IS 456 Cl. 11")
+    f("C-401@R2", "P1:RW-1:GL", "wall", "RW-1", "thickness", 350, None, "mm", 10, "IS 456 Cl. 11")
+    f("C-401@R2", "P1:RW-1:GL", "wall", "RW-1", "cover", 50, None, "mm", 5, "IS 456 Cl. 26.4")
+    f("P-601@R1", "P1:WaterTank:GL", "tank", "WT-1", "thickness", 200, None, "mm", 5, "IS 3370")
     return F
 
 
@@ -313,6 +340,22 @@ RFIS = [
      "response": "600 mm per A-101 R2 governs; elevation to be corrected in next issue.",
      "raised_on": "2026-08-25", "answered_on": "2026-08-28", "impact": "No revision (elevation typo)",
      "resulting_drawing_id": None},
+]
+
+# Remote-site-specific design and access constraints. These are synthetic demo records,
+# not a substitute for the consultant's issued construction documents.
+RFIS += [
+    {"rfi_id": "RFI-060", "subject": "Ambulance road retaining wall base width and drainage", "location_id": "P1:RW-1:GL",
+     "drawing_ref": "C-401", "spec_ref": "IS 14458; IS 456", "status": "Answered",
+     "question": "The hillside cut exposed loose strata at RW-1. Confirm whether the 300 mm wall detail can proceed.",
+     "response": "No. Use C-401 R2: 350 mm stem, revised base detail, filter media and weep holes before backfill.",
+     "raised_on": "2026-08-29", "answered_on": "2026-09-03", "impact": "Revision issued: C-401 R2",
+     "resulting_drawing_id": "C-401@R2"},
+    {"rfi_id": "RFI-061", "subject": "OPD block monsoon concrete-pour access", "location_id": "P1:E-1:L1",
+     "drawing_ref": "A-201", "spec_ref": "IS 456 Cl. 13", "status": "Open",
+     "question": "Confirm the covered pump staging route during the monsoon diversion period.",
+     "response": None, "raised_on": "2026-09-08", "answered_on": None,
+     "impact": "Awaiting site-engineer route approval", "resulting_drawing_id": None},
 ]
 
 SUBMITTALS = [
@@ -383,6 +426,21 @@ DPRS = [
      "safety": "Housekeeping observation at Zone B: welding cables across walkway."},
 ]
 
+DPRS += [
+    {"log_date": "2026-09-10", "weather": "Intermittent hill rain, low cloud, 16–21 °C",
+     "manpower": {"mason": 11, "bar_bender": 8, "carpenter": 9, "helper": 21, "operator": 2, "supervisor": 3},
+     "work_done": "OPD columns E-1/E-2 reinforcement checked to A-201 R1. Ambulance-road retaining wall excavation stopped after loose strata was seen; RFI-060 revision briefed.",
+     "materials": {"TMT Fe500D received (t)": 8.6, "concrete cover blocks 40 mm (nos)": 420, "filter media (cum)": 0},
+     "equipment": {"backhoe": "standby — excavation suspended", "concrete pump": "access route under review"},
+     "safety": "Hillside exclusion zone maintained; no work below unsupported cut face."},
+    {"log_date": "2026-09-11", "weather": "Overcast, rain after 15:00, 15–20 °C",
+     "manpower": {"mason": 10, "bar_bender": 7, "carpenter": 8, "helper": 19, "operator": 2, "supervisor": 3},
+     "work_done": "C-401 R2 retaining-wall revision issued to the crew. OPD column E-1 ties measured at 150 c/c; pre-pour materials staged under cover.",
+     "materials": {"TMT Fe500D (t)": 3.2, "drainage filter aggregate (cum)": 12, "geotextile (sqm)": 180},
+     "equipment": {"pickup": "working", "needle vibrator": 2},
+     "safety": "Morning toolbox talk: rain, slope stability and ambulance access segregation."},
+]
+
 PERMITS = [
     {"permit_id": "HWP-0112", "permit_type": "hot_work", "location_id": "P1:ZoneB:L3",
      "valid_from": "2026-09-10T08:00", "valid_to": "2026-09-10T18:00", "status": "Active",
@@ -400,6 +458,13 @@ PERMITS = [
      "valid_from": "2026-09-08T08:00", "valid_to": "2026-09-12T18:00", "status": "Suspended",
      "issued_by": "S. Deshmukh (Site In-charge)", "template_pref": ["QC-HSE-PRM-005"],
      "unsatisfied_keywords": ["shoring"]},
+]
+
+PERMITS += [
+    {"permit_id": "EXC-0041", "permit_type": "excavation", "location_id": "P1:RW-1:GL",
+     "valid_from": "2026-09-10T08:00", "valid_to": "2026-09-12T18:00", "status": "Suspended",
+     "issued_by": "N. Rawat (HSE Officer)", "template_pref": ["QC-HSE-PRM-005"],
+     "unsatisfied_keywords": ["shoring", "sloping", "benching"]},
 ]
 
 # Pre-pour checklist instance for L4 slab: hold point NOT released.
@@ -443,6 +508,23 @@ OBSERVATIONS = [
      "drawing_id": "A-102@R4", "revision_claimed": "R4", "contradiction_flag": 0, "contradiction_kinds": "[]",
      "clarification_asked": None, "final_decision": "log_observation", "linked_rfi_id": "RFI-047",
      "linked_template_id": "QC-SPW-REG-004", "created_at": "2026-09-08T09:40:00+05:30"},
+]
+
+OBSERVATIONS += [
+    {"observation_id": "OBS-000103", "project_id": "P1", "session_id": None,
+     "spoken_text": "OPD E-1 column ties measured 150 mm centre to centre before the rain.",
+     "structured_summary": "Pithoragarh OPD Block, Column E-1 L1: tie spacing 150 mm verified against A-201 R1.",
+     "location_id": "P1:E-1:L1", "element": "column", "attribute": "rebar_spacing", "value_claimed": 150, "unit": "mm",
+     "drawing_id": "A-201@R1", "revision_claimed": "R1", "contradiction_flag": 0, "contradiction_kinds": "[]",
+     "clarification_asked": None, "final_decision": "log_observation", "linked_rfi_id": None,
+     "linked_template_id": "QC-SPW-REG-004", "created_at": "2026-09-11T11:20:00+05:30"},
+    {"observation_id": "OBS-000104", "project_id": "P1", "session_id": None,
+     "spoken_text": "Ambulance road retaining wall work stopped pending the revised geotechnical detail.",
+     "structured_summary": "RW-1 retaining wall: excavation remains suspended; C-401 R2 and RFI-060 require drainage detail before restart.",
+     "location_id": "P1:RW-1:GL", "element": "wall", "attribute": "thickness", "value_claimed": 350, "unit": "mm",
+     "drawing_id": "C-401@R2", "revision_claimed": "R2", "contradiction_flag": 0, "contradiction_kinds": "[]",
+     "clarification_asked": None, "final_decision": "stop_work", "linked_rfi_id": "RFI-060",
+     "linked_template_id": "QC-SPW-REG-004", "created_at": "2026-09-11T16:05:00+05:30"},
 ]
 
 # Short paraphrased code-clause notes for retrieval (not verbatim code text).
