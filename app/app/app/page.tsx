@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { api, type Health } from "@/lib/api";
+import TalkScreen from "@/components/TalkScreen";
 import ObservationsScreen from "@/components/ObservationsScreen";
 import ScenariosScreen from "@/components/ScenariosScreen";
 import EnrollScreen from "@/components/EnrollScreen";
@@ -39,17 +41,18 @@ const ConversationScreen = dynamic(
   },
 );
 
-type Tab = "live" | "observations" | "scenarios" | "enroll";
+type Tab = "talk" | "live" | "observations" | "scenarios" | "enroll";
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: "talk", label: "Talk" },
   { key: "live", label: "Live" },
   { key: "observations", label: "Logs" },
   { key: "scenarios", label: "Scenarios" },
   { key: "enroll", label: "Enroll" },
 ];
 
-export default function Home() {
-  const [tab, setTab] = useState<Tab>("live");
+export default function AppConsole() {
+  const [tab, setTab] = useState<Tab>("talk");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
@@ -117,16 +120,33 @@ export default function Home() {
         {/* Top App Header Bar */}
         <header className="sticky top-0 z-40 mb-3 flex items-center justify-between rounded-xl px-3.5 py-2.5 backdrop-blur-xl border border-white/10 bg-black/60 shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
           <div className="flex items-center gap-2.5">
-            <VesperLogo size={20} />
+            <Link href="/" className="hover:opacity-80 transition-opacity">
+              <VesperLogo size={20} />
+            </Link>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            <Link
+              href="/"
+              className="text-[11px] font-mono text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded border border-white/10 bg-white/5"
+            >
+              ← Landing
+            </Link>
             <LiveBadge state={status.state} label={status.label} />
           </div>
         </header>
 
         {/* Main App Content View */}
         <main className="flex-1 pb-24">
+          {tab === "talk" ? (
+            <TalkScreen
+              sessionId={sessionId}
+              health={health}
+              sessionError={sessionError}
+              voiceEnrolled={voiceEnrolled}
+              onGoToEnroll={() => setTab("enroll")}
+            />
+          ) : null}
           {tab === "live" ? <ConversationScreen /> : null}
           {tab === "observations" ? <ObservationsScreen /> : null}
           {tab === "scenarios" ? <ScenariosScreen /> : null}
