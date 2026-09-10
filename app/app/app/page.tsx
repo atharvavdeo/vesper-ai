@@ -46,8 +46,8 @@ const ConversationScreen = dynamic(
 type Tab = "talk" | "live" | "observations" | "scenarios" | "enroll";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "talk", label: "Talk" },
   { key: "live", label: "Live" },
+  { key: "talk", label: "Talk" },
   { key: "observations", label: "Logs" },
   { key: "scenarios", label: "Scenarios" },
   { key: "enroll", label: "Enroll" },
@@ -56,7 +56,8 @@ const TABS: { key: Tab; label: string }[] = [
 export default function AppConsole() {
   const { getToken, userId } = useAuth();
   const { user } = useUser();
-  const [tab, setTab] = useState<Tab>("talk");
+  // Live voice is the product's primary surface; typed Talk is the dependable fallback.
+  const [tab, setTab] = useState<Tab>("live");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
