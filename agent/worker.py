@@ -15,7 +15,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(REPO_ROOT / ".env")
+# Keep local provider credentials out of tracked files. The backend already uses
+# this override; loading it here keeps the LiveKit worker on the same providers.
+load_dotenv(REPO_ROOT / "backend" / ".env.local", override=True)
 
 from livekit.agents import (  # noqa: E402
     Agent, AgentSession, JobContext, RoomInputOptions, WorkerOptions, cli, function_tool,
@@ -48,6 +52,9 @@ HARD RULES (safety — never bend these):
   measurements that come from SITE MEMORY or a tool result. NEVER invent or estimate a number.
 - When the manager describes a field observation, call `check_observation` with their words
   (verbatim, uncorrected).
+- EVERY completed manager turn must receive one spoken response. This includes a short
+  clarification such as "E-1", "the stem thickness", "yes", or "go". For every site-detail
+  turn, call `check_observation` first; never wait silently for the manager to repeat it.
 - If the result has `contradictions` or `blockers`: in your own words say what is wrong,
   naming the latest drawing + revision + its issue date + the RFI that drove the change +
   the expected value and tolerance, all from the result. Then ask what they want to do —
