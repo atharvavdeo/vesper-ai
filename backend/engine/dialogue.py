@@ -81,6 +81,21 @@ class DialogueSession:
 
         # ---------------- extract (+ optional LLM suggestions)
         ex = extract(text)
+        # A direct reference to another named/grid location starts a fresh observation. Without
+        # this, a completed OPD observation could leak E-1 into a following question about the
+        # ambulance-road retaining wall. Spoken corrections and barge-ins remain part of the
+        # current observation, preserving the safety flow for self-corrections.
+        explicit_place = getattr(ex, "grid", None) or getattr(ex, "zone", None)
+        current_grid = self._sv("grid")
+        current_zone = self._sv("zone")
+        changes_place = bool(
+            explicit_place
+            and ((getattr(ex, "grid", None) and current_grid != ex.grid["value"])
+                 or (getattr(ex, "zone", None) and current_zone != ex.zone["value"]))
+        )
+        if changes_place and self.slots and not ex.isCorrection and not barge_in:
+            events.append("new_observation:explicit_location")
+            self._reset_observation()
         f = NOISE_FACTOR.get(noise or "none", 1)
         if f != 1:
             for k in SLOT_KEYS:

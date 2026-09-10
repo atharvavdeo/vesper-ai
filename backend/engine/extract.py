@@ -206,8 +206,19 @@ def extract(raw: str) -> Extraction:
                         "parser", zm.group(0))
         work = _mask(work, zm.start(), zm.start() + len(zm.group(0)))
 
+    # --- named remote-site assets ----------------------------------------------------------
+    # These are project-memory locations, not generic construction terms. Keep them explicit so
+    # a manager can naturally say "ambulance road retaining wall" without needing a grid code.
+    named_grid_mentions: list[dict] = []
+    for m in _find_all(r"\b(?:rw\s?-?\s?1|retaining\s+wall(?:\s+(?:one|1))?|ambulance\s+road\s+wall)\b", work):
+        named_grid_mentions.append({"value": "RW-1", "start": m.start(), "end": m.start() + len(m.group(0)),
+                                    "confidence": 0.95, "raw": m.group(0)})
+    for m in _find_all(r"\b(?:wt\s?-?\s?1|hospital\s+water\s+tank|overhead\s+water\s+tank)\b", work):
+        named_grid_mentions.append({"value": "WT-1", "start": m.start(), "end": m.start() + len(m.group(0)),
+                                    "confidence": 0.95, "raw": m.group(0)})
+
     # --- grids: C-5 / C5 / C 5 / C/5 ; spoken "see five" / "si paanch"
-    grid_mentions: list[dict] = []
+    grid_mentions: list[dict] = named_grid_mentions[:]
     for m in _find_all(r"\b([a-h])\s?([-/])?\s?(\d{1,2})\b(?!\s?(mm|cm|m|mpa)\b)(?!\d)", work):
         form = m.group(0)
         conf = 0.95 if (re.match(r"[a-h][-/]\d", form) or re.match(r"[a-h]\d", form)) else 0.85
