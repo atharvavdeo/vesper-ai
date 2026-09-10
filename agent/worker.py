@@ -169,8 +169,26 @@ def _keyok(name: str) -> bool:
     return bool(v) and not v.startswith("<")
 
 
+# Whisper continues the STYLE of its prompt, so this is written as a sample site transcript
+# rather than a word list — it biases decoding toward grid refs (C-5, B-4), drawing numbers
+# (A-102, S-301), revisions (R4) and QA vocabulary. Measured: turns "drawing at 102" into
+# "drawing A-102" and "C5" into "C-5", which is what the parser needs. ~150 ms slower than
+# turbo and clearly more accurate on site vocabulary.
+STT_PROMPT = (
+    "Column line C-5, rebar spacing 180 millimetres, drawing A-102 revision R4. "
+    "Cover at B-4 column is 40 millimetres per IS 456. Stirrup spacing at C-6 measured 220. "
+    "Zone B Level 3 hot work permit HWP-0112, fire watch pending, stop work. "
+    "L4 slab thickness 150 millimetres on S-301 revision R2, RFI-050 still open. "
+    "Raise an NCR. Log the observation. D-3 column, M30 concrete, pre-pour hold point."
+)
+
+
 def _stt():
-    return groq.STT(model=os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo"), language="en")
+    return groq.STT(
+        model=os.getenv("GROQ_STT_MODEL", "whisper-large-v3"),
+        language="en",
+        prompt=STT_PROMPT,
+    )
 
 
 def _tts():

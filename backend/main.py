@@ -117,8 +117,16 @@ async def stt(file: UploadFile = File(...), language: str = Form("")):
     raw = await file.read()
     if not raw:
         raise HTTPException(422, "empty audio")
-    data = {"model": os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo"),
-            "response_format": "json", "temperature": "0"}
+    # Same model + domain-biasing prompt as the live agent (agent/worker.py STT_PROMPT):
+    # Whisper continues the style of the prompt, so a sample site transcript pushes decoding
+    # toward grid refs, drawing numbers and revisions the parser depends on.
+    data = {"model": os.getenv("GROQ_STT_MODEL", "whisper-large-v3"),
+            "response_format": "json", "temperature": "0",
+            "prompt": ("Column line C-5, rebar spacing 180 millimetres, drawing A-102 revision R4. "
+                       "Cover at B-4 column is 40 millimetres per IS 456. Stirrup spacing at C-6 "
+                       "measured 220. Zone B Level 3 hot work permit HWP-0112, fire watch pending, "
+                       "stop work. L4 slab thickness 150 millimetres on S-301 revision R2, RFI-050 "
+                       "still open. Raise an NCR. Log the observation.")}
     if language:
         data["language"] = language
     try:
