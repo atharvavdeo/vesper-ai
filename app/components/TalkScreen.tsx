@@ -220,12 +220,14 @@ export default function TalkScreen({
             text,
             audio: audioBlob,
             bargeIn: args.bargeIn,
+            language: lang,
           });
         } else {
           r = await api.turnJson({
             sessionId,
             text,
             bargeIn: args.bargeIn,
+            language: lang,
           });
         }
         setResp(r);

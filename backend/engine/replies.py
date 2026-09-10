@@ -264,3 +264,11 @@ REFUSE = {
     "rfiDeclined": "Theek hai, RFI nahi. Toh observation log kar doon?",
     "nothing": "Main sun raha hoon. Location, attribute aur value boliye — jaise, C-5 pe spacing 180 mm.",
 }
+
+DECISION_LABEL = {
+    "log_observation": "Observation log karna",
+    "raise_rfi": "RFI raise karna",
+    "raise_ncr": "NCR raise karna",
+    "stop_work": "Kaam rokna",
+    "cancel": "Cancel",
+}

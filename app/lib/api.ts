@@ -193,6 +193,7 @@ export const api = {
     text: string;
     bargeIn?: boolean;
     noise?: "none" | "low" | "medium" | "high";
+    language?: "en-IN" | "hi-IN";
   }) =>
     req<TurnResponse>("/api/turn", {
       method: "POST",
@@ -206,6 +207,7 @@ export const api = {
     text: string;
     bargeIn?: boolean;
     noise?: string;
+    language?: "en-IN" | "hi-IN";
     audio?: Blob;
   }) => {
     const fd = new FormData();
@@ -213,6 +215,7 @@ export const api = {
     fd.set("text", opts.text);
     if (opts.bargeIn != null) fd.set("bargeIn", String(opts.bargeIn));
     if (opts.noise) fd.set("noise", opts.noise);
+    if (opts.language) fd.set("language", opts.language);
     if (opts.audio) fd.set("audio", opts.audio, "utterance.webm");
     return req<TurnResponse>("/api/turn", { method: "POST", body: fd });
   },

@@ -289,6 +289,7 @@ async def turn(
     bargeIn: str = Form(""),
     noise: str = Form("none"),
     decision: str = Form(None),
+    language: str = Form("en-IN"),
     audio: UploadFile | None = None,
 ) -> dict:
     # accept JSON too (typed fallback path)
@@ -300,6 +301,7 @@ async def turn(
             bargeIn = body.get("bargeIn", False)
             noise = body.get("noise", "none")
             decision = body.get("decision")
+            language = body.get("language", "en-IN")
         except Exception:
             raise HTTPException(422, "sessionId required")
 
@@ -309,7 +311,7 @@ async def turn(
     barge = str(bargeIn).lower() in ("1", "true", "yes", "on")
 
     out: dict = sess.handle(text=text or "", barge_in=barge, noise=noise or "none",
-                            decision=decision, speaker=speaker)
+                            decision=decision, speaker=speaker, language=language)
     out = dict(out)
     out["speaker"] = speaker
 

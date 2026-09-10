@@ -16,29 +16,11 @@ from db import SafetyGateError, insert_observation, insert_rfi, insert_turn
 
 from .contradictions import check
 from .extract import chips, extract
-from .replies import (
-    R as reply,
-    attr_label,
-    blocker_reply,
-    challenge_reply,
-    confirm_slots_reply,
-    done_reply,
-    loc_label,
-    missing_reply,
-    readback_reply,
-    REFUSE,
-    unknown_drawing_reply,
-)
+from . import replies, replies_en
 
 SLOT_KEYS = ["grid", "level", "zone", "element", "attribute", "value", "unit", "drawingNumber",
              "revisionClaimed", "drawingValueClaimed", "activity", "defect"]
 NOISE_FACTOR = {"none": 1, "low": 0.95, "medium": 0.8, "high": 0.65}
-DECISION_LABEL = {
-    "log_observation": "Observation log karna", "raise_rfi": "RFI raise karna", "raise_ncr": "NCR",
-    "stop_work": "Kaam rokna", "cancel": "Cancel",
-}
-
-
 class DialogueSession:
     def __init__(self, repo, session_id: str, llm=None, persist_turns: bool = True) -> None:
         self.repo = repo
@@ -60,6 +42,7 @@ class DialogueSession:
         self.gps = None
         self.lastCheck = None
         self.last_speaker = None
+        self._replies = replies
 
     def _reset_observation(self) -> None:
         self.state = "capturing"
@@ -80,7 +63,11 @@ class DialogueSession:
         return s["value"] if s else None
 
     def handle(self, *, text: str = "", barge_in: bool = False, noise: str = "none",
-               decision: str | None = None, speaker: dict | None = None) -> dict:
+               decision: str | None = None, speaker: dict | None = None,
+               language: str | None = None) -> dict:
+        if language:
+            self._replies = replies_en if language.lower().startswith("en") else replies
+        r = self._replies
         self.last_speaker = speaker
         if self.state in ("logged", "cancelled"):
             self._reset_observation()
@@ -218,10 +205,10 @@ class DialogueSession:
 
         if decision == "cancel":
             self.state = "cancelled"
-            out = done_reply("cancel")
+            out = r.done_reply("cancel")
             logged = {"decision": "cancelled"}
         elif not text and not decision:
-            out = reply(REFUSE["nothing"])
+            out = r.R(r.REFUSE["nothing"])
             self.state = "capturing" if prev_state == "checking" else prev_state
         elif c.blockers:
             # ---------------- BLOCKED: only stop_work / raise_ncr / cancel
@@ -231,8 +218,8 @@ class DialogueSession:
             else:
                 self.state = "blocked"
                 speak(
-                    blocker_reply(c, self.slots,
-                                  DECISION_LABEL[decision]
+                    r.blocker_reply(c, self.slots,
+                                  r.DECISION_LABEL[decision]
                                   if (decision and decision not in ("stop_work", "raise_ncr"))
                                   else None),
                     [b["kind"] for b in c.blockers], "blocker",
@@ -241,23 +228,23 @@ class DialogueSession:
                     events.append("decision_deferred_until_blocker_spoken")
         elif clarify_drawing:
             self.state = "challenging"
-            speak(unknown_drawing_reply(clarify_drawing), ["unknown_drawing"], None)
+            speak(r.unknown_drawing_reply(clarify_drawing), ["unknown_drawing"], None)
             if decision:
                 events.append("decision_refused:unknown_drawing")
         elif c.missing:
             self.state = "capturing"
-            out = missing_reply(c, self.slots)
+            out = r.missing_reply(c, self.slots)
             if decision:
-                out = reply(f"Log karne ke liye detail chahiye. {out['text']}")
+                out = r.R(f"I need those details before logging. {out['text']}")
                 events.append("decision_refused:missing_field")
             clarified_kinds = ["missing_critical_field"]
         elif c.lowConfidence:
             self.state = "confirming"
             self.pendingConfirm = list(c.lowConfidence)
-            out = confirm_slots_reply(c.lowConfidence, self.slots,
+            out = r.confirm_slots_reply(c.lowConfidence, self.slots,
                                       (c.drawing or {}).get("drawing_number"))
             if decision:
-                out = reply(f"{REFUSE['confirmFirst']} {out['text']}")
+                out = r.R(f"{r.REFUSE['confirmFirst']} {out['text']}")
                 events.append("decision_refused:low_confidence")
             self.lastOffer = None
         elif flags:
@@ -267,14 +254,14 @@ class DialogueSession:
                 out, logged = self._execute(decision, c, [k["kind"] for k in flags], events)
             elif ambiguous_yes and already_spoken:
                 self.state = "challenging"
-                out = reply(REFUSE["ambiguousYes"])
+                out = r.R(r.REFUSE["ambiguousYes"])
             elif ex.rfiDeclined and already_spoken and not decision:
                 self.state = "confirming"
-                out = reply(REFUSE["rfiDeclined"])
+                out = r.R(r.REFUSE["rfiDeclined"])
                 self.lastOffer = "log"
             else:
                 self.state = "challenging"
-                speak(challenge_reply(c, self.slots, REFUSE["clarifyFirst"] if decision else ""),
+                speak(r.challenge_reply(c, self.slots, r.REFUSE["clarifyFirst"] if decision else ""),
                       [k["kind"] for k in flags], "log_or_rfi")
                 if decision:
                     events.append("decision_deferred_until_clarified")
@@ -289,10 +276,10 @@ class DialogueSession:
                 out, logged = self._execute(decision, c, [], events)
             elif ex.rfiDeclined and not decision:
                 self.state = "confirming"
-                speak(readback_reply(c, self.slots, "Theek hai, RFI nahi."), [], "log")
+                speak(r.readback_reply(c, self.slots, "Okay, no RFI."), [], "log")
             else:
                 self.state = "confirming"
-                speak(readback_reply(c, self.slots), [], "log")
+                speak(r.readback_reply(c, self.slots), [], "log")
 
         contradictions_out = flags + ([clarify_drawing] if clarify_drawing else [])
         turn = {
@@ -332,11 +319,12 @@ class DialogueSession:
         return turn
 
     def _execute(self, decision, c, kinds, events):
+        r = self._replies
         if decision == "cancel":
             self.state = "cancelled"
-            return done_reply("cancel"), {"decision": "cancelled"}
-        loc = loc_label(c, self.slots)
-        attr = attr_label(c.attribute)
+            return r.done_reply("cancel"), {"decision": "cancelled"}
+        loc = r.loc_label(c, self.slots)
+        attr = r.attr_label(c.attribute)
         drawing_id = (c.drawing["drawing_id"]
                       if (c.drawing and self.repo.is_verified_latest(c.drawing["drawing_id"]))
                       else None)
@@ -403,7 +391,7 @@ class DialogueSession:
             events.append(f"observation_logged:{obs_id}")
             self.state = "logged"
             return (
-                done_reply(decision, obs_id, rfi_id,
+                r.done_reply(decision, obs_id, rfi_id,
                            (f"{c.drawing['drawing_number']} {c.drawing['revision']}"
                             if c.drawing else None)),
                 {"observation_id": obs_id, "rfi_id": rfi_id, "decision": decision},
@@ -412,8 +400,8 @@ class DialogueSession:
             events.append(f"safety_gate_refused:{str(e)}")
             self.state = "challenging"
             return (
-                reply(f"Safety check ne log rok diya: "
-                      f"{str(e).replace('SAFETY GATE: ', '')}. Kripya details dobara confirm kijiye."),
+                r.R(f"Safety check prevented the log: "
+                    f"{str(e).replace('SAFETY GATE: ', '')}. Please confirm the details again."),
                 None,
             )
 
