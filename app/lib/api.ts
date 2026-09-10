@@ -4,6 +4,12 @@
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
 
+let authToken: string | null = null;
+
+export function setApiAuthToken(token: string | null) {
+  authToken = token;
+}
+
 export type Health = {
   db: boolean;
   llm: "nvidia" | "groq" | "off";
@@ -122,7 +128,9 @@ class ApiError extends Error {
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, init);
+    const headers = new Headers(init?.headers);
+    if (authToken) headers.set("authorization", `Bearer ${authToken}`);
+    res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   } catch (e) {
     throw new ApiError(
       `Network error calling ${path}: ${(e as Error).message}`,
@@ -166,7 +174,7 @@ export const api = {
     }),
 
   createSession: (userName?: string) =>
-    req<{ sessionId: string }>("/api/session", {
+    req<{ sessionId: string; commandLimit: number; commandsUsed: number }>("/api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(userName ? { userName } : {}),
@@ -238,6 +246,19 @@ export const api = {
   },
 
   observations: () => req<ObservationRow[]>("/api/observations"),
+
+  conversations: () =>
+    req<{
+      sessions: Array<{
+        session_id: string;
+        started_at: string;
+        ended_at: string | null;
+        lang: string;
+        turns: Array<{ role: "user" | "agent"; text: string; state: string; created_at: string }>;
+      }>;
+      commandLimit: number;
+      commandsUsed: number;
+    }>("/api/conversations"),
   observation: (id: string) =>
     req<ObservationDetail>(`/api/observations/${encodeURIComponent(id)}`),
 

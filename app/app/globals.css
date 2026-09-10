@@ -123,6 +123,44 @@ body {
   box-shadow: 0 0 24px rgba(126, 226, 168, 0.14), inset 0 1px 0 rgba(126, 226, 168, 0.3);
 }
 
+/* Dotted glow is used only for the graceful end of the free allowance. */
+.command-limit-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  border-radius: 18px;
+  background: radial-gradient(circle at 50% 0%, rgba(14, 116, 144, 0.34), rgba(4, 8, 15, 0.96) 65%);
+  box-shadow: 0 0 38px rgba(14, 165, 233, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  animation: command-limit-in 520ms var(--ease) both;
+}
+
+.dotted-glow-background {
+  position: absolute;
+  inset: 0;
+  opacity: 0.9;
+  background-image: radial-gradient(circle, rgba(186, 230, 253, 0.72) 1px, transparent 1.7px);
+  background-size: 10px 10px;
+  mask-image: radial-gradient(circle at 50% 42%, black 0%, rgba(0,0,0,0.82) 31%, transparent 75%);
+  animation: dotted-drift 5s linear infinite;
+}
+
+.command-limit-check {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #e0f2fe, #38bdf8);
+  color: #06233a;
+  font-size: 24px;
+  font-weight: 800;
+  box-shadow: 0 0 30px rgba(125, 211, 252, 0.75);
+}
+
+@keyframes dotted-drift { to { background-position: 40px 30px; } }
+@keyframes command-limit-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
 /* Liquid Metal & Glass Buttons */
 .btn-base {
   position: relative;

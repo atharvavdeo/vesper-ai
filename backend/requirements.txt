@@ -4,3 +4,5 @@ python-multipart
 httpx
 python-dotenv
 openai
+livekit-api
+PyJWT[crypto]

@@ -23,6 +23,7 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout = 3000")
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("CREATE TABLE IF NOT EXISTS user_usage (user_id TEXT PRIMARY KEY, command_count INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)")
     return conn
 
 
@@ -289,6 +290,28 @@ def create_session(repo: Repo, user_name: str = "Site Manager", lang: str = "hi-
 def end_session(repo: Repo, session_id: str) -> None:
     repo.db.execute("UPDATE voice_sessions SET ended_at = ? WHERE session_id = ?", (_now_iso(), session_id))
     repo.db.commit()
+
+
+def command_usage(repo: Repo, user_id: str) -> int:
+    row = repo.db.execute("SELECT command_count FROM user_usage WHERE user_id = ?", (user_id,)).fetchone()
+    return int(row["command_count"]) if row else 0
+
+
+def reserve_command(repo: Repo, user_id: str, limit: int) -> tuple[bool, int]:
+    """Atomically reserve one command; prevents concurrent tabs exceeding the allowance."""
+    now = _now_iso()
+    with repo.db:
+        repo.db.execute("INSERT OR IGNORE INTO user_usage (user_id, command_count, updated_at) VALUES (?, 0, ?)", (user_id, now))
+        cur = repo.db.execute("UPDATE user_usage SET command_count = command_count + 1, updated_at = ? WHERE user_id = ? AND command_count < ?", (now, user_id, limit))
+    return cur.rowcount == 1, command_usage(repo, user_id)
+
+
+def sessions_for_user(repo: Repo, user_name: str, limit: int = 12) -> list[dict]:
+    return repo._all("SELECT session_id, started_at, ended_at, lang FROM voice_sessions WHERE user_name = ? ORDER BY started_at DESC LIMIT ?", (user_name, limit))
+
+
+def turns_for_session(repo: Repo, session_id: str) -> list[dict]:
+    return repo._all("SELECT role, text, state, created_at FROM voice_turns WHERE session_id = ? ORDER BY turn_id ASC", (session_id,))
 
 
 def insert_turn(repo: Repo, t: dict) -> int:

@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { api, type Health } from "@/lib/api";
+import { UserButton } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
+import { api, setApiAuthToken, type Health } from "@/lib/api";
 import TalkScreen from "@/components/TalkScreen";
 import ObservationsScreen from "@/components/ObservationsScreen";
 import ScenariosScreen from "@/components/ScenariosScreen";
 import EnrollScreen from "@/components/EnrollScreen";
+import WorkflowIntro from "@/components/WorkflowIntro";
 import { VesperLogo, LiveBadge } from "@/components/ui";
 
 const ConversationScreen = dynamic(
@@ -52,22 +55,32 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 export default function AppConsole() {
+  const { getToken, userId } = useAuth();
   const [tab, setTab] = useState<Tab>("talk");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [voiceEnrolled, setVoiceEnrolled] = useState<boolean | null>(null);
+  const [commandsUsed, setCommandsUsed] = useState(0);
+  const [commandLimit, setCommandLimit] = useState(3);
 
   useEffect(() => {
     let cancelled = false;
-    api
+    void getToken().then((token) => {
+      setApiAuthToken(token);
+      return api
       .createSession()
       .then((r) => {
-        if (!cancelled) setSessionId(r.sessionId);
+        if (!cancelled) {
+          setSessionId(r.sessionId);
+          setCommandsUsed(r.commandsUsed);
+          setCommandLimit(r.commandLimit);
+        }
       })
       .catch((e: Error) => {
         if (!cancelled) setSessionError(`Session start failed: ${e.message}`);
       });
+    });
     api
       .health()
       .then((h) => {
@@ -87,7 +100,7 @@ export default function AppConsole() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [getToken, userId]);
 
   const onEnrolledChange = useCallback(
     (enrolled: boolean) => setVoiceEnrolled(enrolled),
@@ -126,6 +139,12 @@ export default function AppConsole() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <WorkflowIntro />
+            <UserButton
+              appearance={{
+                elements: { avatarBox: "h-7 w-7" },
+              }}
+            />
             <Link
               href="/"
               className="text-[11px] font-mono text-zinc-400 hover:text-white transition-colors px-2 py-1 rounded border border-white/10 bg-white/5"
@@ -145,6 +164,8 @@ export default function AppConsole() {
               sessionError={sessionError}
               voiceEnrolled={voiceEnrolled}
               onGoToEnroll={() => setTab("enroll")}
+              commandsRemaining={Math.max(0, commandLimit - commandsUsed)}
+              onCommandUsed={() => setCommandsUsed((used) => Math.min(commandLimit, used + 1))}
             />
           ) : null}
           {tab === "live" ? <ConversationScreen /> : null}
@@ -157,6 +178,7 @@ export default function AppConsole() {
 
         {/* Floating Liquid-Metal Dock Navigation */}
         <nav
+          id="workflow-navigation"
           aria-label="Primary Navigation"
           className="fixed inset-x-0 bottom-3 z-40 mx-auto w-[calc(100%-24px)] max-w-[430px]"
         >

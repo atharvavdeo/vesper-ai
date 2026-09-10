@@ -7,6 +7,8 @@ import os
 from typing import Any
 
 import httpx
+import jwt
+from jwt import PyJWKClient
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -51,6 +53,51 @@ _llm = make_llm_assist()
 _sessions: dict[str, DialogueSession] = {}
 
 
+def _user_id(request: Request) -> str:
+    """Verify the Clerk session token in deployment; local development has a safe demo identity."""
+    if not config.CLERK_JWT_ISSUER:
+        return request.headers.get("X-Vesper-User", "local-demo")
+    token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+    if not token:
+        raise HTTPException(401, "sign in is required")
+    try:
+        key = PyJWKClient(f"{config.CLERK_JWT_ISSUER}/.well-known/jwks.json").get_signing_key_from_jwt(token).key
+        claims = jwt.decode(token, key, algorithms=["RS256"], issuer=config.CLERK_JWT_ISSUER, options={"verify_aud": False})
+    except jwt.PyJWTError as exc:
+        raise HTTPException(401, "invalid sign-in token") from exc
+    subject = str(claims.get("sub") or "")
+    if not subject:
+        raise HTTPException(401, "invalid sign-in token")
+    return subject
+
+
+def _reserve_or_limit(request: Request) -> int:
+    user_id = _user_id(request)
+    ok, used = dbmod.reserve_command(_repo, user_id, config.FREE_COMMAND_LIMIT)
+    if not ok:
+        raise HTTPException(429, detail={"code": "free_command_limit_reached", "message": "Your three complimentary Vesper commands are complete.", "limit": config.FREE_COMMAND_LIMIT, "used": used})
+    return used
+
+
+def _stt_error_response(upstream_status: int, detail: str) -> JSONResponse:
+    """Translate Groq failures into useful API failures.
+
+    Groq returns 400 for an undecodable WebM (for example, a recording stopped
+    before its container has been finalised).  Returning 502 in that case made
+    a browser recording problem look like an upstream outage.
+    """
+    body = {"error": "STT transcription failed", "detail": detail[:300]}
+    if upstream_status in (400, 413, 415, 422):
+        body["error"] = "invalid or unsupported audio"
+        return JSONResponse(body, status_code=422)
+    if upstream_status in (401, 403):
+        # Do not expose provider authentication diagnostics to browsers.
+        return JSONResponse({"error": "STT provider is not configured"}, status_code=503)
+    if upstream_status == 429:
+        return JSONResponse({"error": "STT provider is temporarily busy"}, status_code=503)
+    return JSONResponse(body, status_code=502)
+
+
 def _session(sid: str) -> DialogueSession:
     s = _sessions.get(sid)
     if not s:
@@ -87,6 +134,7 @@ async def rtc_token(request: Request) -> dict:
     lk_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
     if not (lk_url and lk_key and lk_secret) or lk_url.startswith("<"):
         raise HTTPException(503, "LiveKit not configured (LIVEKIT_URL/API_KEY/API_SECRET)")
+    _reserve_or_limit(request)
     try:
         body = await request.json()
     except Exception:
@@ -138,11 +186,15 @@ async def stt(file: UploadFile = File(...), language: str = Form("")):
                 files={"file": (file.filename or "turn.webm", raw,
                                 file.content_type or "audio/webm")})
         if r.status_code != 200:
-            return JSONResponse({"error": f"groq {r.status_code}", "detail": r.text[:300]},
-                                status_code=502)
-        return {"text": (r.json().get("text") or "").strip()}
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=502)
+            return _stt_error_response(r.status_code, r.text)
+        try:
+            return {"text": (r.json().get("text") or "").strip()}
+        except (ValueError, AttributeError):
+            return JSONResponse({"error": "invalid STT provider response"}, status_code=502)
+    except httpx.TimeoutException:
+        return JSONResponse({"error": "STT provider timed out"}, status_code=504)
+    except httpx.HTTPError:
+        return JSONResponse({"error": "STT provider is unavailable"}, status_code=503)
 
 
 # ---------------------------------------------------------------- speaker enrollment
@@ -190,10 +242,11 @@ async def new_session(request: Request) -> dict:
         body = await request.json()
     except Exception:
         pass
-    user = (body or {}).get("userName") or "Site Manager"
+    user = _user_id(request)
     sid = dbmod.create_session(_repo, user)
     _sessions[sid] = DialogueSession(_repo, sid, _llm)
-    return {"sessionId": sid}
+    return {"sessionId": sid, "commandLimit": config.FREE_COMMAND_LIMIT,
+            "commandsUsed": dbmod.command_usage(_repo, user)}
 
 
 # ---------------------------------------------------------------- turn
@@ -235,6 +288,7 @@ async def turn(
         except Exception:
             raise HTTPException(422, "sessionId required")
 
+    _reserve_or_limit(request)
     sess = _session(sessionId)
     speaker = await _verify_speaker(audio)
     barge = str(bargeIn).lower() in ("1", "true", "yes", "on")
@@ -270,6 +324,16 @@ async def decide(request: Request) -> dict:
 
     out = dict(sess.handle(text="", decision=dec))
     return out
+
+
+@app.get("/api/conversations")
+async def conversations(request: Request) -> dict:
+    user = _user_id(request)
+    sessions = dbmod.sessions_for_user(_repo, user)
+    for session in sessions:
+        session["turns"] = dbmod.turns_for_session(_repo, session["session_id"])
+    return {"sessions": sessions, "commandLimit": config.FREE_COMMAND_LIMIT,
+            "commandsUsed": dbmod.command_usage(_repo, user)}
 
 
 # ---------------------------------------------------------------- observations

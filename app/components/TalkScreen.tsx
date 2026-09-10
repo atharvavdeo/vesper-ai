@@ -9,6 +9,8 @@ import {
   type TurnResponse,
 } from "@/lib/api";
 import { Card, Chip, ErrorBanner, Button, WaveVisualizer, VesperLogo } from "@/components/ui";
+import CommandLimitReached from "@/components/CommandLimitReached";
+import ConversationHistory from "@/components/ConversationHistory";
 
 const DECISION_LABELS: Record<DecisionKey, string> = {
   log_observation: "Log observation",
@@ -52,12 +54,16 @@ export default function TalkScreen({
   sessionError,
   voiceEnrolled,
   onGoToEnroll,
+  commandsRemaining = 3,
+  onCommandUsed,
 }: {
   sessionId: string | null;
   health: Health | null;
   sessionError: string | null;
   voiceEnrolled?: boolean | null;
   onGoToEnroll?: () => void;
+  commandsRemaining?: number;
+  onCommandUsed?: () => void;
 }) {
   const [lang, setLang] = useState<"en-IN" | "hi-IN">("en-IN");
   const [listening, setListening] = useState(false);
@@ -71,6 +77,8 @@ export default function TalkScreen({
   );
   const [ttsMissing, setTtsMissing] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
   // client-only capability detection — must NOT run during render (SSR hydration)
   const [mounted, setMounted] = useState(false);
   const [srSupported, setSrSupported] = useState(false);
@@ -159,6 +167,10 @@ export default function TalkScreen({
   const sendTurn = useCallback(
     async (args: { text: string; audio?: Blob; bargeIn: boolean }) => {
       if (!sessionId) return;
+      if (limitReached || commandsRemaining === 0) {
+        setLimitReached(true);
+        return;
+      }
       setBusy(true);
       setErr(null);
       setDecisionResult(null);
@@ -209,16 +221,19 @@ export default function TalkScreen({
           });
         }
         setResp(r);
+        onCommandUsed?.();
+        setHistoryRefresh((value) => value + 1);
         const speech = r.reply?.speech || r.reply?.text || "";
         void playTts(speech);
       } catch (e) {
+        if ((e as { status?: number }).status === 429) setLimitReached(true);
         setErr((e as Error).message);
       } finally {
         setBusy(false);
         bargeInRef.current = false;
       }
     },
-    [sessionId, lang, playTts],
+    [sessionId, lang, playTts, limitReached, commandsRemaining, onCommandUsed],
   );
 
   const stopMic = useCallback(() => {
@@ -370,12 +385,16 @@ export default function TalkScreen({
   const blockers = resp?.blockers ?? [];
   const allowed = resp?.allowedDecisions ?? [];
   const speakerLocked = resp?.speaker && resp.speaker.match === false;
+  const exhausted = limitReached || commandsRemaining === 0;
 
   return (
     <div className="flex flex-col gap-4">
       {/* Language & Health Header */}
       <div className="flex items-center justify-between gap-2 px-1">
-        <div className="flex items-center gap-1.5 p-0.5 rounded-lg border border-white/10 bg-black/40">
+        <div
+          id="workflow-language"
+          className="flex items-center gap-1.5 p-0.5 rounded-lg border border-white/10 bg-black/40"
+        >
           {(["en-IN", "hi-IN"] as const).map((l) => {
             const active = lang === l;
             return (
@@ -420,8 +439,13 @@ export default function TalkScreen({
         </div>
       ) : null}
 
+      {exhausted ? <CommandLimitReached /> : null}
+
       {/* Push-to-Talk Mic hero */}
-      <div className="glass-panel py-6 px-4 flex flex-col items-center justify-center text-center">
+      <div
+        id="workflow-capture"
+        className="glass-panel py-6 px-4 flex flex-col items-center justify-center text-center"
+      >
         <div className="mb-4">
           <p className="text-xs uppercase tracking-wider text-zinc-400 font-medium font-mono">
             Operational Voice Memory
@@ -440,7 +464,7 @@ export default function TalkScreen({
               if (listening) stopMic();
               else void startMic();
             }}
-            disabled={!sessionId || busy || (mounted && !micSupported)}
+            disabled={exhausted || !sessionId || busy || (mounted && !micSupported)}
             aria-label={listening ? "Stop recording" : "Push to talk"}
             className={`mic-circle ${listening ? "is-listening" : ""}`}
           >
@@ -478,7 +502,7 @@ export default function TalkScreen({
             </div>
           ) : (
             <span className="text-xs text-zinc-400">
-              Tap mic or type observation below
+              {commandsRemaining ?? 3} free command{commandsRemaining === 1 ? "" : "s"} remaining · tap mic or type below
             </span>
           )}
 
@@ -496,28 +520,29 @@ export default function TalkScreen({
         </div>
       </div>
 
-      {/* Typed Input Fallback */}
-      <div className="flex gap-2">
+      {/* Typed chat fallback */}
+      <div id="workflow-typed-input" className="flex gap-2">
         <input
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") submitTyped();
           }}
-          placeholder="Or type: 'Column C-5 pe rebar spacing 180mm'..."
+          placeholder="Chat with Vesper: 'What is the latest drawing for C-5?'"
           className="flex-1 rounded-lg border border-white/15 bg-black/60 px-3.5 py-2 text-xs outline-none text-white placeholder:text-zinc-500 focus:border-white/40 focus:ring-1 focus:ring-white/20 transition-all backdrop-blur-md"
         />
         <Button
           variant="solid"
           size="sm"
           onClick={submitTyped}
-          disabled={!sessionId || busy || !typed.trim()}
+          disabled={exhausted || !sessionId || busy || !typed.trim()}
         >
           Send
         </Button>
       </div>
 
-      <ErrorBanner msg={err} />
+      <div id="workflow-review-area">
+        <ErrorBanner msg={err} />
 
       {/* Live Transcript Bubble */}
       {liveTranscript ? (
@@ -647,6 +672,8 @@ export default function TalkScreen({
           </div>
         </Card>
       ) : null}
+      <ConversationHistory refreshKey={historyRefresh} />
+      </div>
     </div>
   );
 }

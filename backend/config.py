@@ -62,3 +62,7 @@ def llm_provider() -> str:
 SPEAKER_ID_ENABLED = _bool(os.getenv("SPEAKER_ID_ENABLED"), False)
 SPEAKER_ID_URL = os.getenv("SPEAKER_ID_URL", "http://localhost:8788").rstrip("/")
 SPEAKER_ID_THRESHOLD = float(os.getenv("SPEAKER_ID_THRESHOLD", "0.70"))
+
+# Required in deployment. Empty keeps localhost development friction-free.
+CLERK_JWT_ISSUER = os.getenv("CLERK_JWT_ISSUER", "").rstrip("/")
+FREE_COMMAND_LIMIT = int(os.getenv("FREE_COMMAND_LIMIT", "3"))
