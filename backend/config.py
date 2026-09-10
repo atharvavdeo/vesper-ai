@@ -30,7 +30,12 @@ CRITICAL_FIELDS = [s.strip() for s in os.getenv(
 RIME_API_KEY = os.getenv("RIME_API_KEY", "").strip()
 RIME_MODEL = os.getenv("RIME_MODEL", "arcana")
 RIME_SPEAKER = os.getenv("RIME_SPEAKER", "").strip()
-RIME_LANG = os.getenv("RIME_LANG", "hi")
+# The Talk console is English by default. Hinglish is an explicit user selection,
+# rather than an accidental fallback caused by a deployment's legacy Rime settings.
+RIME_LANG = os.getenv("RIME_LANG", "hin")
+RIME_SPEAKER_EN = os.getenv("RIME_SPEAKER_EN", "cove").strip()
+RIME_LANG_EN = os.getenv("RIME_LANG_EN", "eng")
+RIME_MODEL_EN = os.getenv("RIME_MODEL_EN", "mistv3")
 RIME_ENABLED = bool(RIME_API_KEY) and not RIME_API_KEY.startswith("<")
 
 # ---- LLM ----

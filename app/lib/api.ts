@@ -280,13 +280,15 @@ export const api = {
   // TTS: returns {ok:true, blob} on audio, {ok:false} on 503 rime-missing.
   async tts(
     text: string,
+    language: "en-IN" | "hi-IN" = "en-IN",
   ): Promise<{ ok: true; blob: Blob } | { ok: false; reason: string }> {
     let res: Response;
     try {
       res = await fetch(`${API_BASE}/api/tts`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, language }),
+        signal: AbortSignal.timeout(15_000),
       });
     } catch (e) {
       return { ok: false, reason: (e as Error).message };

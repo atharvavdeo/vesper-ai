@@ -4,13 +4,15 @@
 
 Vesper can synthesize a short Hinglish/Hindi-capable spoken safety response through a server-side Rime proxy. The browser never receives the Rime API key.
 
-## Locked organizer configuration
+## Voice selection
+
+| Mode | Model ID | Speaker | Language |
+| --- | --- |
+| Default Talk / Live English | `mistv3` | `cove` | `eng` |
+| Explicit Hinglish | `arcana` | `astra` | `hin` |
 
 | Setting | Value |
 | --- | --- |
-| Model ID | `arcana` |
-| Speaker | `astra` |
-| Language | `hin` |
 | Endpoint | `https://users.rime.ai/v1/rime-tts` |
 | Upstream transport | HTTPS `POST`, JSON request body, Bearer authentication |
 | Requested / returned audio format | `audio/mp3` / `audio/mpeg` |

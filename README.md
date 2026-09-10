@@ -285,8 +285,9 @@ good" — it's **zero wrong logs**.
 
 ## 7. Rime voice contract and evidence
 
-The organizer configuration is locked to **model `arcana`**, **speaker `astra`**, and
-**language `hin`**. Vesper sends an HTTPS `POST` with JSON and Bearer authentication to
+The explicit Hinglish mode uses the organizer configuration — **model `arcana`**, **speaker
+`astra`**, and **language `hin`**. The default English Talk mode uses **model `mistv3`**,
+**speaker `cove`**, and **language `eng`**, matching the low-latency LiveKit worker. Vesper sends an HTTPS `POST` with JSON and Bearer authentication to
 `https://users.rime.ai/v1/rime-tts`, requests `audio/mp3`, and returns `audio/mpeg` from
 `POST /api/tts` to one browser `<audio>` element. The API key stays server-side.
 

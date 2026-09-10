@@ -131,10 +131,10 @@ export default function TalkScreen({
   }, [speaking, stopPlayback]);
 
   const playTts = useCallback(
-    async (text: string) => {
+    async (text: string, language: "en-IN" | "hi-IN") => {
       if (!text) return;
       setTtsMissing(false);
-      const out = await api.tts(text);
+      const out = await api.tts(text, language);
       if (out.ok) {
         if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
         const url = URL.createObjectURL(out.blob);
@@ -160,8 +160,10 @@ export default function TalkScreen({
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         const u = new SpeechSynthesisUtterance(text);
         const voices = window.speechSynthesis.getVoices();
-        const hi = voices.find((v) => v.lang === "hi-IN" || v.lang === "hi_IN");
-        if (hi) u.voice = hi;
+        const languagePrefix = language === "hi-IN" ? "hi" : "en";
+        const preferred = voices.find((v) => v.lang.toLowerCase().startsWith(languagePrefix));
+        if (preferred) u.voice = preferred;
+        u.lang = language;
         u.onstart = () => setSpeaking(true);
         u.onend = () => setSpeaking(false);
         window.speechSynthesis.speak(u);
@@ -230,7 +232,7 @@ export default function TalkScreen({
         onCommandUsed?.();
         setHistoryRefresh((value) => value + 1);
         const speech = r.reply?.speech || r.reply?.text || "";
-        void playTts(speech);
+        void playTts(speech, lang);
       } catch (e) {
         if ((e as { status?: number }).status === 429) setLimitReached(true);
         setErr((e as Error).message);
@@ -378,7 +380,7 @@ export default function TalkScreen({
       const r = await api.decision(sessionId, d);
       setDecisionResult(r);
       const speech = r.reply?.speech || r.reply?.text || "";
-      void playTts(speech);
+      void playTts(speech, lang);
     } catch (e) {
       setErr((e as Error).message);
     } finally {

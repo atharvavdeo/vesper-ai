@@ -409,26 +409,32 @@ _tts_cache: dict[str, bytes] = {}
 async def tts(request: Request):
     body = await request.json()
     text = (body.get("text") or "").strip()
+    language = str(body.get("language") or "en-IN").strip().lower()
     if not text:
         raise HTTPException(422, "text required")
     if not config.RIME_ENABLED:
         return JSONResponse({"error": "rime key missing"}, status_code=503)
-    if text in _tts_cache:
-        return StreamingResponse(io.BytesIO(_tts_cache[text]), media_type="audio/mpeg")
+    use_hinglish = language.startswith("hi")
+    speaker = config.RIME_SPEAKER if use_hinglish else config.RIME_SPEAKER_EN
+    rime_lang = config.RIME_LANG if use_hinglish else config.RIME_LANG_EN
+    model = config.RIME_MODEL if use_hinglish else config.RIME_MODEL_EN
+    cache_key = f"{model}:{speaker}:{rime_lang}:{text}"
+    if cache_key in _tts_cache:
+        return StreamingResponse(io.BytesIO(_tts_cache[cache_key]), media_type="audio/mpeg")
     try:
         async with httpx.AsyncClient(timeout=20.0) as cx:
             r = await cx.post(
                 "https://users.rime.ai/v1/rime-tts",
                 headers={"Authorization": f"Bearer {config.RIME_API_KEY}",
                          "Accept": "audio/mp3", "Content-Type": "application/json"},
-                json={"text": text, "speaker": config.RIME_SPEAKER,
-                      "modelId": config.RIME_MODEL, "lang": config.RIME_LANG})
+                json={"text": text, "speaker": speaker,
+                      "modelId": model, "lang": rime_lang})
         if r.status_code != 200:
             return JSONResponse({"error": f"rime {r.status_code}", "detail": r.text[:300]},
                                 status_code=502)
         audio = r.content
         if len(_tts_cache) < 64:
-            _tts_cache[text] = audio
+            _tts_cache[cache_key] = audio
         return StreamingResponse(io.BytesIO(audio), media_type="audio/mpeg")
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=502)
