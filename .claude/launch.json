@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "landing",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "5510", "--directory", "/Users/atharvadeo/Documents/VoiceAgent/landing", "--bind", "127.0.0.1"],
-      "port": 5510
+      "name": "app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/atharvadeo/Documents/VoiceAgent/app", "run", "dev", "--", "--port", "3100"],
+      "port": 3100
     }
   ]
 }

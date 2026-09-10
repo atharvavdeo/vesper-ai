@@ -4,15 +4,26 @@
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") || "http://localhost:8000";
 
-let authToken: string | null = null;
+// Clerk session tokens live ~60 s, so a token captured once at mount goes stale and every
+// later call fails auth. Keep the getter instead: Clerk caches and refreshes it in memory,
+// so asking per request costs nothing on the hot path.
+type TokenGetter = () => Promise<string | null>;
+let tokenGetter: TokenGetter | null = null;
 
-export function setApiAuthToken(token: string | null) {
-  authToken = token;
+export function setApiTokenGetter(getter: TokenGetter | null) {
+  tokenGetter = getter;
+}
+
+async function authHeaders(init?: HeadersInit): Promise<Headers> {
+  const headers = new Headers(init);
+  const token = tokenGetter ? await tokenGetter().catch(() => null) : null;
+  if (token) headers.set("authorization", `Bearer ${token}`);
+  return headers;
 }
 
 export type Health = {
   db: boolean;
-  llm: "nvidia" | "groq" | "off";
+  llm: "cerebras" | "nvidia" | "groq" | "off";
   rime: boolean;
   voiceid: boolean;
 };
@@ -39,6 +50,8 @@ export type Reply = { text: string; speech?: string };
 export type Speaker = { match: boolean; score: number } | null;
 
 export type TurnResponse = {
+  kind?: "answer" | "observation";
+  lowConfidence?: string[];
   state:
     | "capturing"
     | "checking"
@@ -128,8 +141,7 @@ class ApiError extends Error {
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    const headers = new Headers(init?.headers);
-    if (authToken) headers.set("authorization", `Bearer ${authToken}`);
+    const headers = await authHeaders(init?.headers);
     res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   } catch (e) {
     throw new ApiError(
@@ -166,7 +178,7 @@ export const api = {
   health: () => req<Health>("/api/health"),
 
   // LiveKit real-time token. 503 until LIVEKIT_* is configured on the backend.
-  rtcToken: (body?: { identity?: string; name?: string; room?: string }) =>
+  rtcToken: (body?: { name?: string; language?: "en-IN" | "hi-IN" }) =>
     req<RtcToken>("/api/rtc/token", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -220,11 +232,11 @@ export const api = {
     return req<TurnResponse>("/api/turn", { method: "POST", body: fd });
   },
 
-  decision: (sessionId: string, decision: DecisionKey) =>
+  decision: (sessionId: string, decision: DecisionKey, language?: "en-IN" | "hi-IN") =>
     req<DecisionResponse>("/api/decision", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sessionId, decision }),
+      body: JSON.stringify({ sessionId, decision, language }),
     }),
 
   voiceStatus: () =>
@@ -289,7 +301,7 @@ export const api = {
     try {
       res = await fetch(`${API_BASE}/api/tts`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: await authHeaders({ "content-type": "application/json" }),
         body: JSON.stringify({ text, language }),
         signal: AbortSignal.timeout(15_000),
       });

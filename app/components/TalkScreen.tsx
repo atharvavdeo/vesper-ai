@@ -21,10 +21,45 @@ const DECISION_LABELS: Record<DecisionKey, string> = {
 };
 
 const SUGGESTED_QUESTIONS = [
-  "What should I check before today's pour?",
-  "What is the latest drawing for column C-5?",
-  "Log rebar spacing 180 mm at C-5 on A-102 R4.",
+  "What should I check before the L4 slab pour?",
+  "What is the cover at E-1?",
+  "Any open RFIs?",
+  "E-1 column cover measured 30 mm",
 ];
+
+type QuickReply = { label: string; text: string };
+
+/** Tap-able answers for whatever Vesper just asked, so a manager never has to speak or type
+ *  a one-word reply. Derived only from the engine response (its candidates are DB rows). */
+function quickReplies(r: TurnResponse | null): QuickReply[] {
+  if (!r) return [];
+  const out: QuickReply[] = [];
+  if (r.state === "confirming" && (r.lowConfidence?.length ?? 0) > 0) {
+    out.push({ label: "Yes, that's right", text: "yes" }, { label: "No", text: "no" });
+  }
+  const m = r.missing?.[0] as { evidence?: { field?: string; candidates?: string[] } } | undefined;
+  const field = m?.evidence?.field;
+  const cands = m?.evidence?.candidates ?? [];
+  if (field === "level") {
+    for (const id of cands.slice(0, 4)) {
+      const lvl = id.split(":")[2] ?? "";
+      out.push({ label: lvl.replace(/^L(\d+)$/, "Level $1"), text: lvl.replace(/^L(\d+)$/, "level $1") });
+    }
+  } else if (field === "element") {
+    for (const c of cands.slice(0, 4)) out.push({ label: c, text: c });
+  } else if (field === "attribute") {
+    for (const a of ["spacing", "cover", "thickness"]) out.push({ label: a, text: a });
+  } else if (field === "location_unknown") {
+    for (const c of cands.slice(0, 6)) out.push({ label: c, text: c });
+  }
+  for (const c of r.contradictions ?? []) {
+    const ev = c.evidence as { candidates?: string[] } | undefined;
+    if (c.kind === "unknown_drawing") {
+      for (const d of (ev?.candidates ?? []).slice(0, 4)) out.push({ label: d, text: `drawing ${d}` });
+    }
+  }
+  return out;
+}
 
 // Minimal shape of the Web Speech API we use.
 type SpeechRecognitionLike = {
@@ -184,7 +219,7 @@ export default function TalkScreen({
       setDecisionResult(null);
 
       let text = args.text.trim();
-      let audioBlob = args.audio;
+      const audioBlob = args.audio;
 
       // If we recorded audio, check if we need server STT.
       // We transcribe via server whenever:
@@ -379,7 +414,7 @@ export default function TalkScreen({
     setBusy(true);
     setErr(null);
     try {
-      const r = await api.decision(sessionId, d);
+      const r = await api.decision(sessionId, d, lang);
       setDecisionResult(r);
       const speech = r.reply?.speech || r.reply?.text || "";
       void playTts(speech, lang);
@@ -394,6 +429,7 @@ export default function TalkScreen({
   const contradictions = resp?.contradictions ?? [];
   const blockers = resp?.blockers ?? [];
   const allowed = resp?.allowedDecisions ?? [];
+  const replies = decisionResult ? [] : quickReplies(resp);
   const speakerLocked = resp?.speaker && resp.speaker.match === false;
   const exhausted = limitReached || commandsRemaining === 0;
 
@@ -456,14 +492,9 @@ export default function TalkScreen({
         id="workflow-capture"
         className="glass-panel py-6 px-4 flex flex-col items-center justify-center text-center"
       >
-        <div className="mb-4">
-          <p className="text-xs uppercase tracking-wider text-zinc-400 font-medium font-mono">
-            Operational Voice Memory
-          </p>
-          <h2 className="text-lg font-medium text-white tracking-tight mt-0.5">
-            Tap and speak your <span className="editorial-em">site observation</span>
-          </h2>
-        </div>
+        <h2 className="mb-4 text-base font-medium text-white tracking-tight">
+          Ask a question or report an <span className="editorial-em">observation</span>
+        </h2>
 
         {/* Concentric Radar Ring Mic Button */}
         <div className={`mic-shell ${listening ? "listening" : ""}`}>
@@ -535,12 +566,13 @@ export default function TalkScreen({
       {/* Typed chat fallback */}
       {!exhausted ? (
         <div id="workflow-suggestions" className="flex flex-wrap gap-1.5 px-1">
-          <span className="w-full text-[10px] font-mono uppercase tracking-wider text-zinc-500">Try a question</span>
+          <span className="w-full text-[10px] font-mono uppercase tracking-wider text-zinc-500">Try</span>
           {SUGGESTED_QUESTIONS.map((question) => (
             <button
               key={question}
               type="button"
-              onClick={() => setTyped(question)}
+              disabled={busy || !sessionId}
+              onClick={() => void sendTurn({ text: question, bargeIn: false })}
               className="rounded-full border border-sky-200/15 bg-sky-300/[0.06] px-2.5 py-1 text-left text-[11px] text-sky-100/85 transition hover:border-sky-200/35 hover:bg-sky-300/[0.12]"
             >
               {question}
@@ -663,25 +695,40 @@ export default function TalkScreen({
         </div>
       ) : null}
 
-      {/* Decision Action Buttons */}
-      {allowed.length ? (
+      {/* Options: answer Vesper's question or decide, with one tap */}
+      {!decisionResult && (replies.length || allowed.length) ? (
         <div className="glass-panel p-3 flex flex-col gap-2">
-          <span className="text-[10px] font-mono tracking-wider uppercase text-zinc-400">
-            Recommended Action
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {allowed.map((d) => (
-              <Button
-                key={d}
-                variant={d === "log_observation" ? "solid" : "ghost"}
-                size="sm"
-                onClick={() => onDecision(d)}
-                disabled={busy}
-              >
-                {DECISION_LABELS[d]}
-              </Button>
-            ))}
-          </div>
+          <span className="text-[10px] font-mono tracking-wider uppercase text-zinc-400">Choose</span>
+          {replies.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {replies.map((q) => (
+                <button
+                  key={q.label}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void sendTurn({ text: q.text, bargeIn: false })}
+                  className="rounded-full border border-sky-200/20 bg-sky-300/[0.07] px-3 py-1.5 text-xs text-sky-100 hover:border-sky-200/40 disabled:opacity-50"
+                >
+                  {q.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {allowed.length ? (
+            <div className="flex flex-wrap gap-2">
+              {allowed.map((d) => (
+                <Button
+                  key={d}
+                  variant={d === "log_observation" || d === "stop_work" ? "solid" : "ghost"}
+                  size="sm"
+                  onClick={() => onDecision(d)}
+                  disabled={busy}
+                >
+                  {DECISION_LABELS[d]}
+                </Button>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -690,12 +737,12 @@ export default function TalkScreen({
         <Card tone="green" title="Action Confirmed">
           <div className="text-xs text-emerald-100 leading-relaxed">
             <p className="font-medium">{decisionResult.reply?.text}</p>
-            <p className="mt-1 font-mono text-[10.5px] text-emerald-300/80">
-              State: {decisionResult.state}
-              {decisionResult.logged
-                ? ` · Logged: ${JSON.stringify(decisionResult.logged)}`
-                : ""}
-            </p>
+            {decisionResult.logged?.observation_id ? (
+              <p className="mt-1 font-mono text-[10.5px] text-emerald-300/80">
+                {decisionResult.logged.observation_id}
+                {decisionResult.logged.rfi_id ? ` · ${decisionResult.logged.rfi_id}` : ""}
+              </p>
+            ) : null}
           </div>
         </Card>
       ) : null}

@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import time
 from typing import Any
 
 import httpx
@@ -53,6 +54,20 @@ _llm = make_llm_assist()
 _sessions: dict[str, DialogueSession] = {}
 
 
+_jwks_client: PyJWKClient | None = None
+_claims_cache: dict[str, tuple[str, float]] = {}  # token -> (subject, exp)
+
+
+def _jwks() -> PyJWKClient:
+    """One JWKS client per process. PyJWKClient caches signing keys, so after the first request
+    verification is a local RSA check instead of an HTTPS round-trip to Clerk every call."""
+    global _jwks_client
+    if _jwks_client is None:
+        _jwks_client = PyJWKClient(f"{config.CLERK_JWT_ISSUER}/.well-known/jwks.json",
+                                   cache_keys=True, lifespan=3600)
+    return _jwks_client
+
+
 def _user_id(request: Request) -> str:
     """Verify the Clerk session token in deployment; local development has a safe demo identity."""
     if not config.CLERK_JWT_ISSUER:
@@ -60,14 +75,22 @@ def _user_id(request: Request) -> str:
     token = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
     if not token:
         raise HTTPException(401, "sign in is required")
+    now = time.time()
+    hit = _claims_cache.get(token)
+    if hit and hit[1] > now:
+        return hit[0]
     try:
-        key = PyJWKClient(f"{config.CLERK_JWT_ISSUER}/.well-known/jwks.json").get_signing_key_from_jwt(token).key
-        claims = jwt.decode(token, key, algorithms=["RS256"], issuer=config.CLERK_JWT_ISSUER, options={"verify_aud": False})
+        key = _jwks().get_signing_key_from_jwt(token).key
+        claims = jwt.decode(token, key, algorithms=["RS256"], issuer=config.CLERK_JWT_ISSUER,
+                            options={"verify_aud": False}, leeway=5)
     except jwt.PyJWTError as exc:
         raise HTTPException(401, "invalid sign-in token") from exc
     subject = str(claims.get("sub") or "")
     if not subject:
         raise HTTPException(401, "invalid sign-in token")
+    if len(_claims_cache) > 2048:
+        _claims_cache.clear()
+    _claims_cache[token] = (subject, float(claims.get("exp") or now + 30))
     return subject
 
 
@@ -100,10 +123,20 @@ def _stt_error_response(upstream_status: int, detail: str) -> JSONResponse:
     return JSONResponse(body, status_code=502)
 
 
-def _session(sid: str) -> DialogueSession:
+def _session(sid: str, user: str) -> DialogueSession:
+    """Return the caller's dialogue session. Sessions live in memory for speed but are
+    restored from voice_sessions after a backend restart, so the console never loses its
+    session memory to a 404; another user's session id is refused."""
+    row = _repo._one("SELECT user_name FROM voice_sessions WHERE session_id = ?", (sid,))
+    if not row:
+        _sessions.pop(sid, None)
+        raise HTTPException(404, "unknown session")
+    if row["user_name"] != user:
+        raise HTTPException(403, "session belongs to another user")
     s = _sessions.get(sid)
     if not s:
-        raise HTTPException(404, "unknown session")
+        s = DialogueSession(_repo, sid, _llm)
+        _sessions[sid] = s
     return s
 
 
@@ -136,6 +169,7 @@ async def rtc_token(request: Request) -> dict:
     lk_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
     if not (lk_url and lk_key and lk_secret) or lk_url.startswith("<"):
         raise HTTPException(503, "LiveKit not configured (LIVEKIT_URL/API_KEY/API_SECRET)")
+    user = _user_id(request)
     _reserve_or_limit(request)
     try:
         body = await request.json()
@@ -145,12 +179,13 @@ async def rtc_token(request: Request) -> dict:
 
     from livekit.api import AccessToken, VideoGrants
 
-    identity = (body or {}).get("identity") or f"manager-{_uuid.uuid4().hex[:8]}"
+    identity = f"{user}#{_uuid.uuid4().hex[:6]}"  # never client-chosen: the agent trusts it
     room = (body or {}).get("room") or f"{os.getenv('AGENT_ROOM_PREFIX', 'vesper')}-{_uuid.uuid4().hex[:8]}"
     tok = (
         AccessToken(lk_key, lk_secret)
         .with_identity(identity)
         .with_name((body or {}).get("name") or "Site Manager")
+        .with_metadata(json.dumps({"user_id": user, "language": (body or {}).get("language", "en-IN")}))
         .with_grants(VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True))
     )
     return {"url": lk_url, "token": tok.to_jwt(), "room": room, "identity": identity}
@@ -201,12 +236,13 @@ async def stt(file: UploadFile = File(...), language: str = Form("")):
 
 # ---------------------------------------------------------------- speaker enrollment
 @app.get("/api/voice/status")
-async def voice_status() -> dict:
+async def voice_status(request: Request) -> dict:
     if not config.SPEAKER_ID_ENABLED:
         return {"enabled": False, "enrolled": False, "reachable": False}
+    user = _user_id(request)
     try:
         async with httpx.AsyncClient(timeout=2.0) as cx:
-            r = await cx.get(f"{config.SPEAKER_ID_URL}/health")
+            r = await cx.get(f"{config.SPEAKER_ID_URL}/health", params={"user_id": user})
         j = r.json() if r.status_code == 200 else {}
         return {"enabled": True, "reachable": r.status_code == 200,
                 "enrolled": bool(j.get("enrolled")), "threshold": j.get("threshold")}
@@ -219,6 +255,7 @@ async def voice_enroll(request: Request):
     """Forward N live audio clips to the voiceid sidecar to (re)enroll the site manager."""
     if not config.SPEAKER_ID_ENABLED:
         raise HTTPException(409, "speaker id disabled")
+    user = _user_id(request)
     form = await request.form()
     files = form.getlist("files") or ([form["file"]] if "file" in form else [])
     if not files:
@@ -230,7 +267,7 @@ async def voice_enroll(request: Request):
                                   getattr(f, "content_type", None) or "application/octet-stream")))
     try:
         async with httpx.AsyncClient(timeout=30.0) as cx:
-            r = await cx.post(f"{config.SPEAKER_ID_URL}/enroll", files=payload)
+            r = await cx.post(f"{config.SPEAKER_ID_URL}/enroll", files=payload, data={"user_id": user})
         return JSONResponse(r.json(), status_code=r.status_code)
     except Exception as e:
         raise HTTPException(502, f"voiceid enroll failed: {e}")
@@ -267,20 +304,24 @@ async def bootstrap_demo(request: Request) -> dict:
 
 
 # ---------------------------------------------------------------- turn
-async def _verify_speaker(audio: UploadFile | None) -> dict | None:
+async def _verify_speaker(audio: UploadFile | None, user: str) -> dict | None:
+    """Fail closed: an unreachable sidecar, a missing enrolment or an undecodable clip all
+    return match=False, which locks every write decision for that voice turn."""
     if not audio or not config.SPEAKER_ID_ENABLED:
         return None
     try:
         raw = await audio.read()
         async with httpx.AsyncClient(timeout=8.0) as cx:
-            r = await cx.post(f"{config.SPEAKER_ID_URL}/verify",
+            r = await cx.post(f"{config.SPEAKER_ID_URL}/verify", data={"user_id": user},
                               files={"file": (audio.filename or "turn.webm", raw,
                                               audio.content_type or "application/octet-stream")})
         if r.status_code == 200:
             return r.json()
+        if r.status_code == 409:
+            return {"match": False, "score": 0.0, "error": "not_enrolled"}
         return {"match": False, "score": 0.0, "error": f"voiceid {r.status_code}"}
-    except Exception as e:
-        return {"match": False, "score": 0.0, "error": str(e)}
+    except Exception:
+        return {"match": False, "score": 0.0, "error": "voiceid_unreachable"}
 
 
 @app.post("/api/turn")
@@ -307,42 +348,56 @@ async def turn(
         except Exception:
             raise HTTPException(422, "sessionId required")
 
+    user = _user_id(request)
+    sess = _session(sessionId, user)
     _reserve_or_limit(request)
-    sess = _session(sessionId)
-    speaker = await _verify_speaker(audio)
+    speaker = await _verify_speaker(audio, user)
+    if speaker is not None:
+        sess.voice_speaker = speaker  # last VOICE turn's verdict gates decisions
     barge = str(bargeIn).lower() in ("1", "true", "yes", "on")
 
+    # an unverified voice cannot trigger a write — neither by button nor by saying "log it"
+    sess.writes_locked = _speaker_locked(sess)
     out: dict = sess.handle(text=text or "", barge_in=barge, noise=noise or "none",
                             decision=decision, speaker=speaker, language=language)
     out = dict(out)
     out["speaker"] = speaker
 
     # speaker gate
-    if speaker is not None and config.SPEAKER_ID_ENABLED and not speaker.get("match"):
-        out["allowedDecisions"] = []
+    if any(e.startswith("decision_refused:speaker_gate") for e in out.get("events", [])):
+        msg = "Logging is locked: your voice is not verified as the enrolled site manager. "
+        out["reply"] = {"text": msg + out["reply"]["text"], "speech": msg + out["reply"].get("speech", "")}
+    if _speaker_locked(sess):
+        out["allowedDecisions"] = [d for d in out.get("allowedDecisions", []) if d == "cancel"]
         out.setdefault("blockers", []).append({
             "kind": "speaker_gate", "severity": "blocker",
             "detail": "Speaker not recognised as the enrolled site manager; logging is locked.",
-            "evidence": {"score": speaker.get("score")},
+            "evidence": {"score": (sess.voice_speaker or {}).get("score"),
+                         "reason": (sess.voice_speaker or {}).get("error")},
         })
     return out
 
 
 # ---------------------------------------------------------------- decision
+_WRITE_DECISIONS = ("log_observation", "raise_rfi", "raise_ncr", "stop_work")
+
+
+def _speaker_locked(sess) -> bool:
+    """Once a session has spoken through the mic, writes need that voice to match the
+    signed-in user's enrolled profile. Typed turns are covered by the Clerk account alone."""
+    v = getattr(sess, "voice_speaker", None)
+    return bool(config.SPEAKER_ID_ENABLED and v is not None and not v.get("match"))
+
+
 @app.post("/api/decision")
 async def decide(request: Request) -> dict:
     body = await request.json()
-    sess = _session(body["sessionId"])
+    user = _user_id(request)
+    sess = _session(body["sessionId"], user)
     dec = body["decision"]
-
-    # re-verify gate: block logging decisions when the last turn failed speaker check
-    last_speaker = getattr(sess, "last_speaker", None)
-    if (config.SPEAKER_ID_ENABLED and last_speaker is not None and not last_speaker.get("match")
-            and dec in ("log_observation", "raise_rfi", "raise_ncr")):
+    if dec in _WRITE_DECISIONS and _speaker_locked(sess):
         raise HTTPException(403, "speaker not verified; logging locked")
-
-    out = dict(sess.handle(text="", decision=dec))
-    return out
+    return dict(sess.handle(text="", decision=dec, language=body.get("language")))
 
 
 @app.get("/api/conversations")
@@ -357,7 +412,8 @@ async def conversations(request: Request) -> dict:
 
 # ---------------------------------------------------------------- observations
 @app.get("/api/observations")
-def observations() -> list[dict]:
+def observations(request: Request) -> list[dict]:
+    _user_id(request)
     rows = _repo._all(
         "SELECT observation_id, created_at, location_id, element, attribute, value_claimed, unit, "
         "drawing_id, revision_claimed, contradiction_flag, contradiction_kinds, final_decision, linked_rfi_id "
@@ -368,7 +424,8 @@ def observations() -> list[dict]:
 
 
 @app.get("/api/observations/{obs_id}")
-def observation(obs_id: str) -> dict:
+def observation(request: Request, obs_id: str) -> dict:
+    _user_id(request)
     row = _repo._one("SELECT * FROM field_observations WHERE observation_id = ?", (obs_id,))
     if not row:
         raise HTTPException(404, "not found")
@@ -411,8 +468,9 @@ _tts_cache: dict[str, bytes] = {}
 
 @app.post("/api/tts")
 async def tts(request: Request):
+    _user_id(request)
     body = await request.json()
-    text = (body.get("text") or "").strip()
+    text = (body.get("text") or "").strip()[:600]
     language = str(body.get("language") or "en-IN").strip().lower()
     if not text:
         raise HTTPException(422, "text required")
@@ -446,16 +504,19 @@ async def tts(request: Request):
 
 # ---------------------------------------------------------------- Memory (thin)
 @app.get("/api/drawings")
-def drawings() -> list[dict]:
+def drawings(request: Request) -> list[dict]:
+    _user_id(request)
     return _repo._all("SELECT * FROM drawings WHERE project_id = ? ORDER BY drawing_number, rev_ordinal",
                       (config.PROJECT_ID,))
 
 
 @app.get("/api/rfis")
-def rfis() -> list[dict]:
+def rfis(request: Request) -> list[dict]:
+    _user_id(request)
     return _repo._all("SELECT * FROM rfis WHERE project_id = ? ORDER BY rfi_id", (config.PROJECT_ID,))
 
 
 @app.get("/api/permits")
-def permits() -> list[dict]:
+def permits(request: Request) -> list[dict]:
+    _user_id(request)
     return _repo.permits_with_checks()

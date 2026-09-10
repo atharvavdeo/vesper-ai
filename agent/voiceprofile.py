@@ -23,6 +23,9 @@ WINDOW_SEC = 6
 VERIFY_EVERY_SEC = 4.0
 SPEAKER_ID_URL = os.getenv("SPEAKER_ID_URL", "http://localhost:8788").rstrip("/")
 ENABLED = os.getenv("SPEAKER_ID_ENABLED", "true").strip().lower() in ("1", "true", "yes", "on")
+# Only verify while the manager is actually speaking: silence and background hum make poor
+# voiceprints and caused false locks. RMS threshold on int16 PCM.
+SPEECH_RMS = int(os.getenv("SPEAKER_ID_MIN_RMS", "450"))
 
 
 def _pcm16_to_wav(pcm: bytes, sample_rate: int = SR) -> bytes:
@@ -31,6 +34,14 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int = SR) -> bytes:
     hdr += b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, sample_rate, sample_rate * 2, 2, 16)
     hdr += b"data" + struct.pack("<I", n)
     return hdr + pcm
+
+
+def _rms(pcm: bytes) -> float:
+    n = len(pcm) // 2
+    if not n:
+        return 0.0
+    samples = struct.unpack(f"<{n}h", pcm[: n * 2])
+    return (sum(x * x for x in samples) / n) ** 0.5
 
 
 class VoiceProfiler:
@@ -60,7 +71,10 @@ class VoiceProfiler:
             async for ev in stream:
                 if self._closed:
                     break
-                self._buf.extend(ev.frame.data.tobytes())
+                pcm = ev.frame.data.tobytes()
+                if _rms(pcm) < SPEECH_RMS:
+                    continue  # skip silence / muted mic so the window holds voiced audio
+                self._buf.extend(pcm)
                 if len(self._buf) > self._max:
                     del self._buf[: len(self._buf) - self._max]
                 now = time.monotonic()
@@ -77,27 +91,30 @@ class VoiceProfiler:
         wav = _pcm16_to_wav(pcm)
         try:
             async with httpx.AsyncClient(timeout=6.0) as cx:
-                r = await cx.post(f"{SPEAKER_ID_URL}/verify",
+                r = await cx.post(f"{SPEAKER_ID_URL}/verify", data={"user_id": self.brain.user_id},
                                   files={"file": ("turn.wav", wav, "audio/wav")})
             if r.status_code == 200:
                 j = r.json()
                 self.brain.speaker_ok = bool(j.get("match"))
                 self.brain.speaker_score = float(j.get("score", 0.0))
-            elif r.status_code == 409:      # nobody enrolled yet -> don't lock the demo
-                self.brain.speaker_ok = True
-                self.brain.speaker_score = None
+                self.brain.speaker_reason = None
             else:
-                self.brain.speaker_ok = True
+                # Fail closed: not enrolled (409), bad audio or sidecar error all lock writes.
+                self.brain.speaker_ok = False
                 self.brain.speaker_score = None
+                self.brain.speaker_reason = "voice not enrolled" if r.status_code == 409 else f"voiceid {r.status_code}"
         except Exception as e:
             logger.warning("verify failed: %s", e)
-            return
+            self.brain.speaker_ok = False
+            self.brain.speaker_score = None
+            self.brain.speaker_reason = "speaker-ID service unreachable"
         if self.on_update:
             try:
                 await self.on_update({
                     "type": "speaker",
                     "match": self.brain.speaker_ok,
                     "score": self.brain.speaker_score,
+                    "reason": self.brain.speaker_reason,
                 })
             except Exception:
                 pass

@@ -14,6 +14,7 @@ import json
 
 from db import SafetyGateError, insert_observation, insert_rfi, insert_turn
 
+from .answer import answer, is_question
 from .contradictions import check
 from .extract import chips, extract
 from . import replies, replies_en
@@ -42,6 +43,7 @@ class DialogueSession:
         self.gps = None
         self.lastCheck = None
         self.last_speaker = None
+        self.question_ctx: dict = {}
         self._replies = replies
 
     def _reset_observation(self) -> None:
@@ -81,6 +83,11 @@ class DialogueSession:
 
         # ---------------- extract (+ optional LLM suggestions)
         ex = extract(text)
+
+        # ---------------- questions are answered from the record, never fed into the
+        # observation slots (that turned "what is the cover at E-1?" into "give the cover in mm").
+        if text and not decision and not self.pendingConfirm and is_question(text, ex):
+            return self._answer_turn(text, ex, prev_state, barge_in, noise, events)
         # A direct reference to another named/grid location starts a fresh observation. Without
         # this, a completed OPD observation could leak E-1 into a following question about the
         # ambulance-road retaining wall. Spoken corrections and barge-ins remain part of the
@@ -164,6 +171,9 @@ class DialogueSession:
 
         # ---------------- decision
         decision = decision or ex.decision
+        if decision in ("log_observation", "raise_rfi", "raise_ncr", "stop_work") and getattr(self, "writes_locked", False):
+            events.append(f"decision_refused:speaker_gate:{decision}")
+            decision = None
         ambiguous_yes = False
         if not decision and ex.affirm and not had_pending and not changed:
             if self.lastOffer == "log":
@@ -332,6 +342,42 @@ class DialogueSession:
                              "blockers": [k["kind"] for k in c.blockers], "events": events},
             })
         return turn
+
+    def _answer_turn(self, text, ex, prev_state, barge_in, noise, events) -> dict:
+        self.utterances.pop()  # a question is not part of the observation being logged
+        # Follow-ups resolve against the observation being discussed first ("tolerance there?"),
+        # then against the previous question ("and at E-2?").
+        ctx = dict(self.question_ctx)
+        for k in ("grid", "zone", "level", "element", "attribute"):
+            if self._sv(k) is not None:
+                ctx[k] = self._sv(k)
+        res = answer(self.repo, text, ex, ctx)
+        self.question_ctx = res["context"]
+        events.append("answered_question")
+        # the pending observation (if any) keeps its state and allowed decisions
+        pending = self.lastCheck if prev_state in ("challenging", "blocked", "confirming") else None
+        allowed = (["stop_work", "raise_ncr", "cancel"] if prev_state == "blocked"
+                   else ["log_observation", "raise_rfi", "raise_ncr", "cancel"] if prev_state in ("challenging", "confirming")
+                   else [])
+        self.state = prev_state if pending else "capturing"
+        out = self._replies.R(res["text"])
+        if self.persist_turns:
+            insert_turn(self.repo, {"sessionId": self.session_id, "role": "user", "text": text,
+                                    "entities": {"extracted": chips(ex), "noise": noise or "none"},
+                                    "state": prev_state, "bargeIn": barge_in})
+            insert_turn(self.repo, {"sessionId": self.session_id, "role": "agent", "text": out["text"],
+                                    "state": self.state, "entities": {"answer": res, "events": events}})
+        return {
+            "sessionId": self.session_id, "state": self.state, "kind": "answer",
+            "unresolved": not res.get("resolved", True),
+            "reply": {"text": out["text"], "speech": out["speech"]},
+            "entities": chips(ex), "contradictions": [], "blockers": [], "missing": [],
+            "lowConfidence": [], "allowedDecisions": allowed, "slots": self.slot_view(),
+            "clarifiedKinds": [], "events": events,
+            "resolved": {"location_id": res["location_id"], "drawing_id": None,
+                         "location_inferred": False, "drawing_label": None, "fact": None},
+            "logged": None,
+        }
 
     def _execute(self, decision, c, kinds, events):
         r = self._replies

@@ -1,4 +1,4 @@
-"""Optional LLM slot-filler. NVIDIA NIM (OpenAI-compatible) with a Groq fallback.
+"""Optional LLM slot-filler. Cerebras -> NVIDIA NIM -> Groq (all OpenAI-compatible).
 
 Faithful port of app/lib/engine/llm.ts, retargeted at OpenAI-compatible endpoints.
 
@@ -59,6 +59,15 @@ def make_llm_assist():
         return None
 
     providers = []
+    if getattr(config, "CEREBRAS_ENABLED", False):
+        try:
+            providers.append((
+                OpenAI(base_url=config.CEREBRAS_BASE_URL, api_key=config.CEREBRAS_API_KEY,
+                       timeout=_TIMEOUT, max_retries=0),
+                config.CEREBRAS_LLM_MODEL,
+            ))
+        except Exception:
+            pass
     if getattr(config, "NVIDIA_ENABLED", False):
         try:
             providers.append((

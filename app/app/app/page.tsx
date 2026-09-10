@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { UserButton, useAuth, useUser } from "@clerk/nextjs";
-import { api, setApiAuthToken, type Health } from "@/lib/api";
+import { api, setApiTokenGetter, type Health } from "@/lib/api";
 import TalkScreen from "@/components/TalkScreen";
 import ObservationsScreen from "@/components/ObservationsScreen";
 import ScenariosScreen from "@/components/ScenariosScreen";
@@ -65,45 +65,35 @@ export default function AppConsole() {
   const [commandsUsed, setCommandsUsed] = useState(0);
   const [commandLimit, setCommandLimit] = useState<number | null>(null);
 
+  // Every API call asks Clerk for a fresh (cached) token rather than reusing a stale one.
   useEffect(() => {
-    let cancelled = false;
-    void getToken().then((token) => {
-      setApiAuthToken(token);
-      const email = user?.primaryEmailAddress?.emailAddress;
-      const seed = email ? api.bootstrapDemo(email).catch(() => undefined) : Promise.resolve();
-      return seed.then(() => api
-      .createSession()
+    setApiTokenGetter(() => getToken());
+    return () => setApiTokenGetter(null);
+  }, [getToken]);
+
+  // One session per signed-in user. The effect used to depend on the Clerk `user` object,
+  // whose identity changes on every profile refresh, so it kept minting new sessions and the
+  // console lost its conversation memory mid-flow.
+  const email = user?.primaryEmailAddress?.emailAddress;
+  const startedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!userId || startedFor.current === userId) return;
+    startedFor.current = userId;
+    const seed = email ? api.bootstrapDemo(email).catch(() => undefined) : Promise.resolve();
+    void seed
+      .then(() => api.createSession())
       .then((r) => {
-        if (!cancelled) {
-          setSessionId(r.sessionId);
-          setCommandsUsed(r.commandsUsed);
-          setCommandLimit(r.commandLimit);
-        }
+        setSessionId(r.sessionId);
+        setCommandsUsed(r.commandsUsed);
+        setCommandLimit(r.commandLimit);
       })
       .catch((e: Error) => {
-        if (!cancelled) setSessionError(`Session start failed: ${e.message}`);
-      }));
-    });
-    api
-      .health()
-      .then((h) => {
-        if (!cancelled) setHealth(h);
-      })
-      .catch(() => {
-        /* health is best-effort */
+        startedFor.current = null;
+        setSessionError(`Session start failed: ${e.message}`);
       });
-    api
-      .voiceStatus()
-      .then((s) => {
-        if (!cancelled) setVoiceEnrolled(s.enrolled);
-      })
-      .catch(() => {
-        /* voice status is best-effort */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken, userId, user]);
+    api.health().then(setHealth).catch(() => undefined);
+    api.voiceStatus().then((s) => setVoiceEnrolled(s.enrolled)).catch(() => undefined);
+  }, [userId, email]);
 
   const onEnrolledChange = useCallback(
     (enrolled: boolean) => setVoiceEnrolled(enrolled),

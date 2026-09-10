@@ -46,7 +46,7 @@ flowchart LR
   subgraph Providers["External provider boundary"]
     LiveKit["LiveKit Cloud<br/>room routing + WebRTC SFU"]:::external
     Groq["Groq Whisper / fallback LLM"]:::external
-    NIM["NVIDIA NIM LLM<br/>primary when configured"]:::external
+    NIM["Cerebras gpt-oss-120b → NVIDIA NIM<br/>LLM fallback chain (unresolved questions only)"]:::external
     Rime["Rime Arcana<br/>mistv3 · cove · eng · WebSocket"]:::external
   end
 
@@ -91,7 +91,7 @@ sequenceDiagram
   participant S as Groq Whisper
   participant E as Deterministic engine
   participant D as SQLite
-  participant X as LLM (NIM/Groq)
+  participant X as LLM (Cerebras → NIM → Groq)
   participant R as Rime
 
   M->>B: Sign in / sign up
@@ -118,23 +118,21 @@ sequenceDiagram
     S-->>W: Transcript
     W->>V: Verify enrolled speaker sample
     V-->>W: Similarity score / verified state
-    W->>E: check_observation(verbatim transcript)
+    W->>E: Brain.observe(verbatim transcript) — every finished turn, no LLM hop
     E->>D: Resolve current facts and rule views
     E-->>W: entities, blockers, contradictions, allowed decisions
     W-->>B: Publish structured result for evidence cards
-    alt clean and verified
-      W->>X: Phrase short grounded confirmation using tool result only
-      X-->>W: Natural-language response
-      W->>R: Stream mistv3/cove/eng audio over WebSocket
+    alt question
+      W->>R: Speak engine answer (latest facts, open items) — LLM + recall only if unresolved
+    else clean and verified
+      W->>R: Stream engine read-back (mistv3/cove/eng over WebSocket)
       R-->>B: Spoken confirmation
       M->>B: Explicitly choose Log
       B->>L: Decision turn
       W->>E: log_observation
       E->>D: Persist linked observation + turn
     else contradiction, permit or hold-point blocker
-      W->>X: Phrase correction and only allowed next choices
-      X-->>W: Grounded challenge
-      W->>R: Stream spoken challenge
+      W->>R: Stream engine challenge with evidence and allowed choices
       R-->>B: Evidence-backed spoken correction
       M->>B: Choose RFI / NCR / Stop / Cancel / Log if allowed
       W->>E: Execute typed decision

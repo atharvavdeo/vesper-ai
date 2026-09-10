@@ -98,9 +98,12 @@ chahte hain, ya RFI raise karna chahte hain?"*
 speaker gate verifies it is the enrolled manager speaking before any logging tool can fire. If a
 critical field is still uncertain, the agent **refuses to log** and asks again.
 
-**5 · The LLM is on a short leash.** It plans the conversation and phrases the reply; the
-grounded facts, contradictions and writes all come from the engine via typed tools
-(`recall`, `check_observation`, `log_observation`, `raise_rfi`, `raise_ncr`, `stop_work`).
+**5 · The LLM is on a short leash.** Every finished turn goes straight into the engine
+(~5 ms on SQLite): observations are checked, questions such as *"what is the cover at E-1?"* or
+*"and at E-2?"* are answered from the latest For-Construction facts, open hold points, permits
+and RFIs (`engine/answer.py`), and the approved reply is spoken with Rime. The LLM is only asked
+when the record has no answer, and then only through its `recall` tool — so a rate-limited
+provider can no longer leave the live conversation silent.
 
 ---
 
@@ -112,7 +115,7 @@ grounded facts, contradictions and writes all come from the engine via typed too
 | **Voice transport** | LiveKit Agents + `livekit-client` (WebRTC) | Real-time full-duplex audio, barge-in, interruption handling |
 | **STT** | Groq Whisper (`livekit.plugins.groq`) | Hinglish speech → text on noisy sites |
 | **TTS** | **Rime** (Arcana) via server-side proxy | Natural Hinglish spoken challenges; API key never reaches the browser |
-| **LLM** | NVIDIA NIM (Nemotron 70B) *primary* → Groq *fallback*, OpenAI-compatible | Dialogue planning + phrasing, tool-calling only |
+| **LLM** | Cerebras `gpt-oss-120b` *primary* → NVIDIA NIM → Groq (LiveKit `FallbackAdapter`) | Only for questions the engine cannot answer from the record; grounded by `recall` |
 | **VAD** | Silero | Turn detection / barge-in |
 | **Backend** | FastAPI + Uvicorn (`:8000`) | Deterministic engine, TTS proxy, speaker gate, scenario runner |
 | **Engine** | Pure Python — `extract` · `numbers` · `contradictions` · `dialogue` · `replies` | Rule-based, testable, no model in the decision path |
@@ -198,11 +201,10 @@ app/                Next.js frontend (:3000) — Live · Observations · Scenari
 agent/              LiveKit voice agent worker
   worker.py           STT → LLM (tool-calling) → TTS pipeline
   engine_bridge.py    typed tools into the deterministic engine
-  memory.py           site memory: DPRs, open RFIs, hold points
   voiceprofile.py     speaker gate wiring
 backend/            FastAPI (:8000)
   CONTRACT.md         frozen HTTP + engine interface — all workstreams build to this
-  engine/             extract · contradictions · dialogue · replies · llm
+  engine/             extract · answer · contradictions · dialogue · memory · replies · llm
   scenarios.py        S01–S10 acceptance harness
 voiceid/            SpeechBrain ECAPA speaker-ID sidecar (:8788) + enroll.py
 data/
@@ -210,7 +212,7 @@ data/
   build_db.py         builds site.db from raw/ + seed/
   seed/               demo project P1 + scenarios.json
   DATA.md             build steps, row counts, sanity checks, known gaps
-landing/            Marketing landing page
+app/public/landing/ Marketing landing page (the only one; served at /)
 DEMO.md             ~3 min live-mic demo script
 .env                Secrets — gitignored, never commit
 ```
@@ -330,9 +332,9 @@ The full claim, procedure, tested result, and limitations are in
 | --- | --- | --- |
 | Rime | Spoken agent responses | `/api/tts` returns an error; the Talk screen falls back to browser speech synthesis and shows a missing/unavailable Rime status. |
 | Groq | Whisper STT and LLM fallback | A failed STT request is surfaced to the user; typed observations remain available. |
-| NVIDIA NIM | Optional primary LLM assist | The deterministic engine continues; Groq is the configured fallback. |
+| Cerebras / NVIDIA NIM | LLM for questions the engine cannot resolve (Cerebras first, NVIDIA next, Groq last) | Fallback moves to the next provider on error or 6 s timeout; engine answers never depend on it. |
 | LiveKit Cloud | Full-duplex browser/worker voice transport | Token minting fails clearly if configuration is missing; typed Talk mode remains available. |
-| SpeechBrain sidecar | Manager speaker verification | Logging is locked when the speaker cannot be verified or the sidecar is unavailable. |
+| SpeechBrain sidecar | Per-account speaker verification (one voiceprint per Clerk user) | Fails closed: unenrolled, unmatched, or sidecar down → write decisions are locked (questions still answered). |
 
 ## 9. Authentication and deployment
 

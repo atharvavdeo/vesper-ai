@@ -50,13 +50,23 @@ type EngineResult = {
   logged?: unknown;
 };
 
-const DECISION_HINTS: Record<string, string> = {
-  log_observation: '"log kar do"',
-  raise_rfi: '"RFI raise karo"',
-  raise_ncr: '"NCR"',
-  stop_work: '"stop work"',
-  cancel: '"cancel"',
+const DECISION_LABELS: Record<string, string> = {
+  log_observation: "Log observation",
+  raise_rfi: "Raise RFI",
+  raise_ncr: "Raise NCR",
+  stop_work: "Stop work",
+  cancel: "Cancel",
 };
+
+const LIVE_PROMPTS = [
+  "What should I check before the L4 slab pour?",
+  "What is the cover at E-1?",
+  "Any open RFIs?",
+];
+
+type SpeakerState = { match: boolean; score: number | null; reason?: string | null };
+
+const COMMAND_TOPIC = "vesper-cmd";
 
 function slotText(v: unknown): string {
   if (v == null) return "";
@@ -146,7 +156,7 @@ export default function ConversationScreen() {
     setIs503(false);
     setLimitReached(false);
     try {
-      const t = await api.rtcToken({ name: "Manager" });
+      const t = await api.rtcToken({ name: "Manager", language: "en-IN" });
       setCreds(t);
     } catch (e) {
       const err = e as Error;
@@ -234,22 +244,41 @@ export default function ConversationScreen() {
       serverUrl={creds.url}
       token={creds.token}
       connect
-      audio
+      // Browser-side noise suppression + echo cancellation keep site noise and Vesper's own
+      // voice out of the transcript before audio ever leaves the phone.
+      audio={{ echoCancellation: true, noiseSuppression: true, autoGainControl: true }}
       video={false}
       onDisconnected={end}
       className="flex flex-col gap-4"
     >
-      <RoomView room={creds.room} onEnd={end} />
+      <RoomView onEnd={end} />
     </LiveKitRoom>
   );
 }
 
-function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
+function RoomView({ onEnd }: { onEnd: () => void }) {
   const { state, audioTrack, agentTranscriptions } = useVoiceAssistant();
-  const { microphoneTrack, localParticipant } = useLocalParticipant();
+  const { microphoneTrack, localParticipant, isMicrophoneEnabled } = useLocalParticipant();
   const [engine, setEngine] = useState<EngineResult | null>(null);
   const [brief, setBrief] = useState<SiteBrief | null>(null);
-  const [remoteAudioMuted, setRemoteAudioMuted] = useState(false);
+  const [speaker, setSpeaker] = useState<SpeakerState | null>(null);
+  const [speakerRequired, setSpeakerRequired] = useState(false);
+
+  // Mute MY mic (not Vesper): while muted nothing reaches STT, so background noise can't be
+  // transcribed or cut Vesper off while it answers.
+  const toggleMic = useCallback(() => {
+    void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+  }, [localParticipant, isMicrophoneEnabled]);
+
+  const send = useCallback(
+    (cmd: { type: "decision"; decision: string } | { type: "text"; text: string }) => {
+      void localParticipant.publishData(new TextEncoder().encode(JSON.stringify(cmd)), {
+        reliable: true,
+        topic: COMMAND_TOPIC,
+      });
+    },
+    [localParticipant],
+  );
   const [engineReplies, setEngineReplies] = useState<
     { text: string; ts: number; id: string }[]
   >([]);
@@ -271,7 +300,13 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
         type?: string;
         result?: EngineResult;
         brief?: SiteBrief;
+        match?: boolean;
+        score?: number | null;
+        reason?: string | null;
+        speaker_required?: boolean;
       };
+      if (d.type === "speaker") setSpeaker({ match: !!d.match, score: d.score ?? null, reason: d.reason });
+      if (d.type === "session") setSpeakerRequired(!!d.speaker_required);
       if (d.type === "engine" && d.result) {
         setEngine(d.result);
         const reply = d.result.spoken_reply?.trim();
@@ -321,15 +356,15 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
     }
     rows.sort((a, b) => a.ts - b.ts);
 
+    // The engine reply arrives on the data channel AND as Vesper's spoken transcription;
+    // show it once. (The data copy only matters if TTS failed and nothing was spoken.)
+    const norm = (t: string) => t.trim().replace(/\s+/g, " ").toLowerCase();
     const displayed: typeof rows = [];
     for (const row of rows) {
-      const previous = displayed.at(-1);
-      const currentText = row.text.trim().replace(/\s+/g, " ").toLowerCase();
-      const previousText = previous?.text.trim().replace(/\s+/g, " ").toLowerCase();
-      const duplicate = previous
-        && previous.who === row.who
-        && currentText === previousText
-        && Math.abs(row.ts - previous.ts) < 10_000;
+      const text = norm(row.text);
+      const duplicate = displayed.some(
+        (d) => d.who === row.who && norm(d.text) === text && Math.abs(row.ts - d.ts) < 20_000,
+      );
       if (!duplicate) displayed.push(row);
     }
     return displayed;
@@ -343,7 +378,6 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
   const contradictions = engine?.contradictions ?? [];
   const blockers = engine?.blockers ?? [];
   const missing = engine?.missing ?? [];
-  const slots = engine?.slots ?? {};
   const resolved = engine?.resolved;
   const fact = resolved?.fact;
   const allowed = engine?.allowed_decisions ?? [];
@@ -358,47 +392,52 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
 
   return (
     <>
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          <span className="p-live-dot" />
-          <span className="font-mono text-xs text-zinc-400">room: {room}</span>
+      <RoomAudioRenderer />
+      <StartAudio
+        label="Tap to enable Vesper's voice"
+        className="glass-panel w-full text-center text-xs py-2 text-zinc-300 hover:text-white"
+      />
+
+      {/* Control bar: state · visualizer · my-mic mute · end */}
+      <div className="glass-panel flex items-center gap-3 px-3 py-2">
+        <span className="p-live-dot" />
+        <span className="text-[10px] uppercase tracking-wider font-mono text-zinc-400 w-[70px] shrink-0">
+          {isMicrophoneEnabled ? state ?? "idle" : "mic off"}
+        </span>
+        <div className="h-7 flex-1 min-w-0">
+          <BarVisualizer state={state} trackRef={audioTrack} barCount={9} className="h-full w-full" />
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setRemoteAudioMuted((muted) => !muted)}>
-            {remoteAudioMuted ? "Unmute Vesper" : "Mute Vesper"}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onEnd} className="text-red-300 border-red-500/40">
-            Disconnect
-          </Button>
-        </div>
+        <button
+          type="button"
+          onClick={toggleMic}
+          aria-pressed={!isMicrophoneEnabled}
+          aria-label={isMicrophoneEnabled ? "Mute my microphone" : "Unmute my microphone"}
+          title={isMicrophoneEnabled ? "Mute my mic" : "Unmute my mic"}
+          className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border transition ${
+            isMicrophoneEnabled
+              ? "border-white/20 bg-white/5 text-zinc-200 hover:bg-white/10"
+              : "border-red-400/60 bg-red-500/20 text-red-200"
+          }`}
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" x2="12" y1="19" y2="22" />
+            {isMicrophoneEnabled ? null : <line x1="3" y1="3" x2="21" y2="21" />}
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={onEnd}
+          className="shrink-0 rounded-full border border-red-500/40 px-2.5 py-1 text-[11px] text-red-300 hover:bg-red-500/10"
+        >
+          End
+        </button>
       </div>
 
-      {!remoteAudioMuted ? <>
-        <RoomAudioRenderer />
-        <div className="glass-panel p-2">
-          <StartAudio
-            label="Tap to enable audio"
-            className="w-full text-center text-xs py-1.5 text-zinc-300 hover:text-white"
-          />
-        </div>
-      </> : null}
+      {speakerRequired ? <SpeakerBadge speaker={speaker} /> : null}
 
       <SiteMemoryPanel brief={brief} />
-
-      {/* Visualizer card */}
-      <div className="glass-panel p-4 flex items-center gap-4">
-        <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[10px] uppercase tracking-wider font-mono text-zinc-300 shrink-0">
-          {state ?? "idle"}
-        </span>
-        <div className="h-10 flex-1">
-          <BarVisualizer
-            state={state}
-            trackRef={audioTrack}
-            barCount={9}
-            className="h-full w-full"
-          />
-        </div>
-      </div>
 
       {/* Live transcript with bubbles */}
       <Card title="Live Stream Transcript">
@@ -456,16 +495,6 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
             ))}
           </ul>
         </Card>
-      ) : null}
-
-      {/* Context slots */}
-      {Object.keys(slots).length ? (
-        <div className="flex flex-wrap gap-1.5">
-          {Object.entries(slots).map(([k, v]) => {
-            const t = slotText(v);
-            return t ? <Chip key={k} label={`${k}: ${t}`} /> : null;
-          })}
-        </div>
       ) : null}
 
       {/* Resolved facts */}
@@ -541,21 +570,50 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
         </Card>
       ) : null}
 
-      {/* Voice decision hints */}
+      {/* Tap or say it: decisions go to the agent over the data channel */}
       {allowed.length ? (
-        <div className="glass-panel p-3 text-center">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 mb-1">
-            Voice Action Command
-          </p>
-          <p className="text-xs text-zinc-300">
-            Say:{" "}
-            <span className="text-white font-medium">
-              {allowed.map((d) => DECISION_HINTS[d] ?? `"${d}"`).join(" · ")}
-            </span>
-          </p>
+        <div className="flex flex-wrap gap-2">
+          {allowed.map((d) => (
+            <Button key={d} variant={d === "log_observation" || d === "stop_work" ? "solid" : "ghost"} size="sm" onClick={() => send({ type: "decision", decision: d })}>
+              {DECISION_LABELS[d] ?? d}
+            </Button>
+          ))}
         </div>
-      ) : null}
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {LIVE_PROMPTS.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => send({ type: "text", text: q })}
+              className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] text-zinc-300 hover:border-white/25 hover:text-white"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
     </>
+  );
+}
+
+function SpeakerBadge({ speaker }: { speaker: SpeakerState | null }) {
+  const ok = speaker?.match;
+  const label = !speaker
+    ? "Verifying your voice — speak a sentence"
+    : ok
+      ? `Voice verified${speaker.score != null ? ` · ${speaker.score.toFixed(2)}` : ""}`
+      : `Logging locked — ${speaker.reason ?? `voice not matched${speaker.score != null ? ` (${speaker.score.toFixed(2)})` : ""}`}`;
+  return (
+    <div
+      className={`rounded-lg border px-3 py-1.5 text-[11px] font-mono ${
+        ok ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+          : speaker ? "border-red-500/30 bg-red-500/10 text-red-200"
+          : "border-white/10 bg-white/5 text-zinc-400"
+      }`}
+    >
+      {label}
+    </div>
   );
 }
 

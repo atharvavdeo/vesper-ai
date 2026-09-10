@@ -38,24 +38,30 @@ RIME_LANG_EN = os.getenv("RIME_LANG_EN", "eng")
 RIME_MODEL_EN = os.getenv("RIME_MODEL_EN", "mistv3")
 RIME_ENABLED = bool(RIME_API_KEY) and not RIME_API_KEY.startswith("<")
 
-# ---- LLM ----
+# ---- LLM (Cerebras primary -> NVIDIA -> Groq) ----
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "").strip()
+CEREBRAS_BASE_URL = os.getenv("CEREBRAS_BASE_URL", "https://api.cerebras.ai/v1")
+CEREBRAS_LLM_MODEL = os.getenv("CEREBRAS_LLM_MODEL", "gpt-oss-120b")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "").strip()
 NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
-NVIDIA_LLM_MODEL = os.getenv("NVIDIA_LLM_MODEL", "meta/llama-3.3-70b-instruct")
+NVIDIA_LLM_MODEL = os.getenv("NVIDIA_LLM_MODEL", "nvidia/llama-3.1-nemotron-70b-instruct")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-GROQ_LLM_MODEL = os.getenv("GROQ_LLM_MODEL", "llama-3.3-70b-versatile")
+GROQ_LLM_MODEL = os.getenv("GROQ_LLM_MODEL", "openai/gpt-oss-20b")
 
 
 def _key_ok(k: str) -> bool:
     return bool(k) and not k.startswith("<")
 
 
+CEREBRAS_ENABLED = _key_ok(CEREBRAS_API_KEY)
 NVIDIA_ENABLED = _key_ok(NVIDIA_API_KEY)
 GROQ_ENABLED = _key_ok(GROQ_API_KEY)
 
 
 def llm_provider() -> str:
+    if CEREBRAS_ENABLED:
+        return "cerebras"
     if NVIDIA_ENABLED:
         return "nvidia"
     if GROQ_ENABLED:
@@ -64,7 +70,7 @@ def llm_provider() -> str:
 
 
 # ---- Speaker ID ----
-SPEAKER_ID_ENABLED = _bool(os.getenv("SPEAKER_ID_ENABLED"), False)
+SPEAKER_ID_ENABLED = _bool(os.getenv("SPEAKER_ID_ENABLED"), True)  # voice writes need a verified voiceprint
 SPEAKER_ID_URL = os.getenv("SPEAKER_ID_URL", "http://localhost:8788").rstrip("/")
 SPEAKER_ID_THRESHOLD = float(os.getenv("SPEAKER_ID_THRESHOLD", "0.70"))
 
