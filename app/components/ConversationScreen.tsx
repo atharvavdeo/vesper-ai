@@ -356,7 +356,7 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
       <Card title="Live Stream Transcript">
         <div
           ref={scrollRef}
-          className="flex max-h-60 flex-col gap-2.5 overflow-y-auto pr-1"
+          className="flex flex-col gap-2.5"
         >
           {transcript.length === 0 ? (
             <p className="text-xs text-zinc-500 py-3 text-center">
