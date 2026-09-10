@@ -60,7 +60,7 @@ export default function TalkScreen({
   sessionError,
   voiceEnrolled,
   onGoToEnroll,
-  commandsRemaining = 3,
+  commandsRemaining,
   onCommandUsed,
 }: {
   sessionId: string | null;
@@ -512,7 +512,9 @@ export default function TalkScreen({
             </div>
           ) : (
             <span className="text-xs text-zinc-400">
-              {commandsRemaining ?? 3} free command{commandsRemaining === 1 ? "" : "s"} remaining · tap mic or type below
+              {commandsRemaining === undefined
+                ? "Unlimited local commands · tap mic or type below"
+                : `${commandsRemaining} free command${commandsRemaining === 1 ? "" : "s"} remaining · tap mic or type below`}
             </span>
           )}
 

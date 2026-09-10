@@ -247,7 +247,7 @@ async def new_session(request: Request) -> dict:
     user = _user_id(request)
     sid = dbmod.create_session(_repo, user)
     _sessions[sid] = DialogueSession(_repo, sid, _llm)
-    return {"sessionId": sid, "commandLimit": config.FREE_COMMAND_LIMIT,
+    return {"sessionId": sid, "commandLimit": config.FREE_COMMAND_LIMIT if config.ENFORCE_FREE_COMMAND_LIMIT else None,
             "commandsUsed": dbmod.command_usage(_repo, user) if config.ENFORCE_FREE_COMMAND_LIMIT else 0}
 
 
@@ -351,7 +351,7 @@ async def conversations(request: Request) -> dict:
     sessions = dbmod.sessions_for_user(_repo, user)
     for session in sessions:
         session["turns"] = dbmod.turns_for_session(_repo, session["session_id"])
-    return {"sessions": sessions, "commandLimit": config.FREE_COMMAND_LIMIT,
+    return {"sessions": sessions, "commandLimit": config.FREE_COMMAND_LIMIT if config.ENFORCE_FREE_COMMAND_LIMIT else None,
             "commandsUsed": dbmod.command_usage(_repo, user) if config.ENFORCE_FREE_COMMAND_LIMIT else 0}
 
 

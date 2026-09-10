@@ -174,7 +174,7 @@ export const api = {
     }),
 
   createSession: (userName?: string) =>
-    req<{ sessionId: string; commandLimit: number; commandsUsed: number }>("/api/session", {
+    req<{ sessionId: string; commandLimit: number | null; commandsUsed: number }>("/api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(userName ? { userName } : {}),
@@ -266,7 +266,7 @@ export const api = {
         lang: string;
         turns: Array<{ role: "user" | "agent"; text: string; state: string; created_at: string }>;
       }>;
-      commandLimit: number;
+      commandLimit: number | null;
       commandsUsed: number;
     }>("/api/conversations"),
   observation: (id: string) =>

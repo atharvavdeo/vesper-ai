@@ -63,7 +63,7 @@ export default function AppConsole() {
   const [health, setHealth] = useState<Health | null>(null);
   const [voiceEnrolled, setVoiceEnrolled] = useState<boolean | null>(null);
   const [commandsUsed, setCommandsUsed] = useState(0);
-  const [commandLimit, setCommandLimit] = useState(3);
+  const [commandLimit, setCommandLimit] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,8 +167,8 @@ export default function AppConsole() {
               sessionError={sessionError}
               voiceEnrolled={voiceEnrolled}
               onGoToEnroll={() => setTab("enroll")}
-              commandsRemaining={Math.max(0, commandLimit - commandsUsed)}
-              onCommandUsed={() => setCommandsUsed((used) => Math.min(commandLimit, used + 1))}
+              commandsRemaining={commandLimit === null ? undefined : Math.max(0, commandLimit - commandsUsed)}
+              onCommandUsed={() => setCommandsUsed((used) => commandLimit === null ? used : Math.min(commandLimit, used + 1))}
             />
           ) : null}
           {tab === "live" ? <ConversationScreen /> : null}

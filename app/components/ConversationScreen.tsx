@@ -247,6 +247,7 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
   const { microphoneTrack, localParticipant } = useLocalParticipant();
   const [engine, setEngine] = useState<EngineResult | null>(null);
   const [brief, setBrief] = useState<SiteBrief | null>(null);
+  const [remoteAudioMuted, setRemoteAudioMuted] = useState(false);
 
   const micTrackRef = useMemo<TrackReferenceOrPlaceholder | undefined>(() => {
     if (!localParticipant) return undefined;
@@ -341,18 +342,25 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
           <span className="p-live-dot" />
           <span className="font-mono text-xs text-zinc-400">room: {room}</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={onEnd} className="text-red-300 border-red-500/40">
-          Disconnect
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setRemoteAudioMuted((muted) => !muted)}>
+            {remoteAudioMuted ? "Unmute Vesper" : "Mute Vesper"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onEnd} className="text-red-300 border-red-500/40">
+            Disconnect
+          </Button>
+        </div>
       </div>
 
-      <RoomAudioRenderer />
-      <div className="glass-panel p-2">
-        <StartAudio
-          label="Tap to enable audio"
-          className="w-full text-center text-xs py-1.5 text-zinc-300 hover:text-white"
-        />
-      </div>
+      {!remoteAudioMuted ? <>
+        <RoomAudioRenderer />
+        <div className="glass-panel p-2">
+          <StartAudio
+            label="Tap to enable audio"
+            className="w-full text-center text-xs py-1.5 text-zinc-300 hover:text-white"
+          />
+        </div>
+      </> : null}
 
       <SiteMemoryPanel brief={brief} />
 
