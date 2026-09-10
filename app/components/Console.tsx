@@ -140,7 +140,7 @@ export default function Console({ demo = false }: { demo?: boolean }) {
 
           <div className="flex items-center gap-2.5">
             <WorkflowIntro setTab={setTab} demo={demo} />
-            {demo && !clerkUserId ? (
+            {demo && !clerkUserId && !process.env.NEXT_PUBLIC_STATIC_DEMO ? (
               <Link href="/sign-in" className="rounded border border-white/20 bg-white px-2 py-1 text-[11px] font-medium text-black">
                 Sign in
               </Link>
@@ -157,7 +157,7 @@ export default function Console({ demo = false }: { demo?: boolean }) {
         {demo ? (
           <div className="mb-3 rounded-lg border border-sky-300/20 bg-sky-300/[0.06] px-3 py-2 text-[11px] leading-relaxed text-sky-100/90">
             <span className="font-medium text-white">Recorded demo.</span> Every reply is real engine output on the
-            Pithoragarh hospital project — nothing is sent or saved. Sign in for live voice.
+            Pithoragarh hospital project, and Vesper&apos;s voice is real Rime audio. Nothing is sent or saved.
           </div>
         ) : null}
 
