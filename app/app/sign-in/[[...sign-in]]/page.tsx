@@ -1,7 +1,5 @@
-"use client";
-
-import { SignIn } from "@clerk/nextjs";
+import AuthExperience from "@/components/AuthExperience";
 
 export default function SignInPage() {
-  return <SignIn fallbackRedirectUrl="/app" />;
+  return <AuthExperience mode="sign-in" />;
 }
