@@ -66,3 +66,4 @@ SPEAKER_ID_THRESHOLD = float(os.getenv("SPEAKER_ID_THRESHOLD", "0.70"))
 # Required in deployment. Empty keeps localhost development friction-free.
 CLERK_JWT_ISSUER = os.getenv("CLERK_JWT_ISSUER", "").rstrip("/")
 FREE_COMMAND_LIMIT = int(os.getenv("FREE_COMMAND_LIMIT", "3"))
+DEMO_SEED_EMAIL = os.getenv("DEMO_SEED_EMAIL", "atharva.v.deo@gmail.com").strip().lower()

@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
-import { useAuth } from "@clerk/nextjs";
+import { UserButton, useAuth, useUser } from "@clerk/nextjs";
 import { api, setApiAuthToken, type Health } from "@/lib/api";
 import TalkScreen from "@/components/TalkScreen";
 import ObservationsScreen from "@/components/ObservationsScreen";
@@ -56,6 +55,7 @@ const TABS: { key: Tab; label: string }[] = [
 
 export default function AppConsole() {
   const { getToken, userId } = useAuth();
+  const { user } = useUser();
   const [tab, setTab] = useState<Tab>("talk");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -68,7 +68,9 @@ export default function AppConsole() {
     let cancelled = false;
     void getToken().then((token) => {
       setApiAuthToken(token);
-      return api
+      const email = user?.primaryEmailAddress?.emailAddress;
+      const seed = email ? api.bootstrapDemo(email).catch(() => undefined) : Promise.resolve();
+      return seed.then(() => api
       .createSession()
       .then((r) => {
         if (!cancelled) {
@@ -79,7 +81,7 @@ export default function AppConsole() {
       })
       .catch((e: Error) => {
         if (!cancelled) setSessionError(`Session start failed: ${e.message}`);
-      });
+      }));
     });
     api
       .health()
@@ -100,7 +102,7 @@ export default function AppConsole() {
     return () => {
       cancelled = true;
     };
-  }, [getToken, userId]);
+  }, [getToken, userId, user]);
 
   const onEnrolledChange = useCallback(
     (enrolled: boolean) => setVoiceEnrolled(enrolled),

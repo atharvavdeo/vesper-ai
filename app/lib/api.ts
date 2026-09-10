@@ -180,6 +180,13 @@ export const api = {
       body: JSON.stringify(userName ? { userName } : {}),
     }),
 
+  bootstrapDemo: (email: string) =>
+    req<{ seeded: boolean }>("/api/bootstrap-demo", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    }),
+
   // JSON turn (typed input, no audio)
   turnJson: (body: {
     sessionId: string;

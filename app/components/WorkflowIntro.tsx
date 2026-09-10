@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { driver, type Driver } from "driver.js";
+import { useUser } from "@clerk/nextjs";
 import "driver.js/dist/driver.css";
 
 const TOUR_KEY = "vesper-workflow-intro-complete";
 
 /** A short, restartable guide to the safety-first observation workflow. */
 export default function WorkflowIntro() {
+  const { user } = useUser();
   const tourRef = useRef<Driver | null>(null);
+  const tourKey = `${TOUR_KEY}-${user?.id ?? "anonymous"}`;
 
   const startTour = useCallback(() => {
     tourRef.current?.destroy();
@@ -24,7 +27,7 @@ export default function WorkflowIntro() {
       prevBtnText: "Back",
       doneBtnText: "Start safely",
       onDestroyed: () => {
-        window.localStorage.setItem(TOUR_KEY, "true");
+        window.localStorage.setItem(tourKey, "true");
       },
       steps: [
         {
@@ -81,16 +84,16 @@ export default function WorkflowIntro() {
     });
     tourRef.current = tour;
     tour.drive();
-  }, []);
+  }, [tourKey]);
 
   useEffect(() => {
-    if (window.localStorage.getItem(TOUR_KEY)) return;
-    const timeout = window.setTimeout(startTour, 450);
+    if (!user || window.localStorage.getItem(tourKey)) return;
+    const timeout = window.setTimeout(startTour, 20);
     return () => {
       window.clearTimeout(timeout);
       tourRef.current?.destroy();
     };
-  }, [startTour]);
+  }, [startTour, tourKey, user]);
 
   return (
     <button

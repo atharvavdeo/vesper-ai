@@ -249,6 +249,21 @@ async def new_session(request: Request) -> dict:
             "commandsUsed": dbmod.command_usage(_repo, user)}
 
 
+@app.post("/api/bootstrap-demo")
+async def bootstrap_demo(request: Request) -> dict:
+    """Give the named demo account a small, clearly-labelled conversation archive once."""
+    user = _user_id(request)
+    body = await request.json()
+    if str(body.get("email", "")).strip().lower() != config.DEMO_SEED_EMAIL:
+        return {"seeded": False}
+    if dbmod.sessions_for_user(_repo, user, limit=1):
+        return {"seeded": False}
+    sid = dbmod.create_session(_repo, user)
+    dbmod.insert_turn(_repo, {"sessionId": sid, "role": "user", "text": "What should I check before today’s L4 slab pour?", "state": "capturing"})
+    dbmod.insert_turn(_repo, {"sessionId": sid, "role": "agent", "text": "Start with the L4 pre-pour hold point and RFI-050. Confirm the latest S-301 revision and the cover requirement before logging.", "state": "challenging"})
+    return {"seeded": True}
+
+
 # ---------------------------------------------------------------- turn
 async def _verify_speaker(audio: UploadFile | None) -> dict | None:
     if not audio or not config.SPEAKER_ID_ENABLED:
