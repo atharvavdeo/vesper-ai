@@ -30,6 +30,11 @@ export default function ObservationsScreen() {
 
   useEffect(() => {
     void load();
+    // LiveKit decisions are written by the room worker, outside this component's
+    // React state. Poll lightly while Logs is open so the audit trail reflects
+    // a just-logged NCR or observation without requiring a page refresh.
+    const refresh = window.setInterval(() => void load(), 8_000);
+    return () => window.clearInterval(refresh);
   }, [load]);
 
   const openDetail = async (id: string) => {
