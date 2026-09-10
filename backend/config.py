@@ -71,4 +71,11 @@ SPEAKER_ID_THRESHOLD = float(os.getenv("SPEAKER_ID_THRESHOLD", "0.70"))
 # Required in deployment. Empty keeps localhost development friction-free.
 CLERK_JWT_ISSUER = os.getenv("CLERK_JWT_ISSUER", "").rstrip("/")
 FREE_COMMAND_LIMIT = int(os.getenv("FREE_COMMAND_LIMIT", "3"))
+# The cap protects public deployments from unbounded provider usage. Local development is
+# deliberately unlimited so a developer can exercise LiveKit and the safety scenarios without
+# consuming a browser session during every restart. Set this explicitly in any deployed runtime.
+ENFORCE_FREE_COMMAND_LIMIT = _bool(
+    os.getenv("ENFORCE_FREE_COMMAND_LIMIT"),
+    os.getenv("APP_ENV", "development").strip().lower() in {"production", "staging"},
+)
 DEMO_SEED_EMAIL = os.getenv("DEMO_SEED_EMAIL", "atharva.v.deo@gmail.com").strip().lower()

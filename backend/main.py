@@ -73,6 +73,8 @@ def _user_id(request: Request) -> str:
 
 def _reserve_or_limit(request: Request) -> int:
     user_id = _user_id(request)
+    if not config.ENFORCE_FREE_COMMAND_LIMIT:
+        return 0
     ok, used = dbmod.reserve_command(_repo, user_id, config.FREE_COMMAND_LIMIT)
     if not ok:
         raise HTTPException(429, detail={"code": "free_command_limit_reached", "message": "Your three complimentary Vesper commands are complete.", "limit": config.FREE_COMMAND_LIMIT, "used": used})
@@ -246,7 +248,7 @@ async def new_session(request: Request) -> dict:
     sid = dbmod.create_session(_repo, user)
     _sessions[sid] = DialogueSession(_repo, sid, _llm)
     return {"sessionId": sid, "commandLimit": config.FREE_COMMAND_LIMIT,
-            "commandsUsed": dbmod.command_usage(_repo, user)}
+            "commandsUsed": dbmod.command_usage(_repo, user) if config.ENFORCE_FREE_COMMAND_LIMIT else 0}
 
 
 @app.post("/api/bootstrap-demo")
@@ -350,7 +352,7 @@ async def conversations(request: Request) -> dict:
     for session in sessions:
         session["turns"] = dbmod.turns_for_session(_repo, session["session_id"])
     return {"sessions": sessions, "commandLimit": config.FREE_COMMAND_LIMIT,
-            "commandsUsed": dbmod.command_usage(_repo, user)}
+            "commandsUsed": dbmod.command_usage(_repo, user) if config.ENFORCE_FREE_COMMAND_LIMIT else 0}
 
 
 # ---------------------------------------------------------------- observations
