@@ -22,7 +22,7 @@
 ## 1. Short Summary
 
 **Vesper** is a real-time, full-duplex voice agent for site managers on Indian construction
-projects. You talk to it in Hinglish, on a noisy site, and it talks back — grounded entirely in
+projects. You can talk in English or Hinglish, on a noisy site, and it talks back — grounded entirely in
 the project's own record: tender/BOQ, drawing revisions, RFIs, submittals, daily progress
 reports, permits and QA/QC checklists.
 
@@ -148,6 +148,18 @@ cd agent && ./run.sh
 
 Then open **http://localhost:3000** → **Enroll** → record 3 live voice samples → **Live**.
 
+The protected console opens on **Live** by default; **Talk** is the typed/push-to-talk fallback.
+If the console ever reports `Session start failed`, verify the backend first, then restart only
+that service:
+
+```bash
+curl -fsS http://127.0.0.1:8000/api/health
+cd backend && ./run.sh
+```
+
+The Logs view refreshes automatically while it is open. A LiveKit room may need a disconnect and
+reconnect after starting the local agent worker.
+
 > ⏳ The first `voiceid` boot downloads the ECAPA model (~80 MB) once.
 
 <details>
@@ -203,6 +215,17 @@ DEMO.md             ~3 min live-mic demo script
 .env                Secrets — gitignored, never commit
 ```
 </details>
+
+### Seeded demonstration project
+
+`P1` is a **synthetic Pithoragarh District Hospital & Staff Quarters** project, designed for
+repeatable safety testing rather than use as issued construction information. It includes OPD and
+maternity columns E-1/E-2, the RW-1 ambulance-road retaining wall, hospital water tank WT-1,
+revisioned drawings, RFI-060, monsoon DPRs, permits, hold points, observations and the cached
+QA/QC library. Rebuild it at any time with `python3 data/build_db.py`.
+
+Never treat seeded measurements as real-site approvals: production projects must ingest their
+own approved drawings, RFIs, permits and inspection records before Vesper is used for decisions.
 
 ---
 
@@ -337,6 +360,18 @@ in Render's secret manager, then copy the resulting API URL into Vercel as
 `NEXT_PUBLIC_API_BASE` and redeploy the frontend. Do not store keys in `render.yaml`, Vercel
 source files, or Git.
 
+The public landing is currently deployed to Cloudflare Pages at
+[vesper-ai.pages.dev](https://vesper-ai.pages.dev). It is intentionally a landing-only deployment:
+it does **not** host the FastAPI, VoiceID or persistent LiveKit worker, so it must not be used as
+the live console URL.
+
+Cloudflare can host the full product through a Worker gateway plus Containers, but the configured
+account must have Workers Paid/Containers access and Docker must be running to build/publish the
+images. The migration plan is in [CLOUDFLARE_DEPLOYMENT.md](./CLOUDFLARE_DEPLOYMENT.md): persist
+shared data in D1/R2 before production cutover, then deploy the FastAPI, VoiceID and LiveKit
+agent containers behind a Clerk-validating Worker. `wrangler containers list` currently verifies
+whether that prerequisite is enabled.
+
 For a CLI deployment after the host accounts are authenticated:
 
 ```bash
@@ -358,3 +393,5 @@ render blueprints validate render.yaml
   conversation validation remains pending.
 - The Rime proxy buffers the upstream response; it is not true chunked audio streaming.
 - Rime, Groq, NVIDIA, and LiveKit are external services: credentials, quota, latency, and network availability affect live behavior.
+- Cloudflare Pages is live for the landing only. End-to-end Cloudflare deployment remains blocked
+  until Containers access is enabled and the SQLite-to-D1/R2 migration is completed.
