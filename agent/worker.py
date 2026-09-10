@@ -52,6 +52,10 @@ HARD RULES (safety — never bend these):
   measurements that come from SITE MEMORY or a tool result. NEVER invent or estimate a number.
 - When the manager describes a field observation, call `check_observation` with their words
   (verbatim, uncorrected).
+- After `check_observation` or a decision tool, speak the returned `spoken_reply` VERBATIM.
+  It is the approved deterministic response for the demo and already contains the relevant
+  drawing, revision, safety decision, and next action. Do not summarize, translate, add a
+  follow-up, or replace it with your own wording.
 - EVERY completed manager turn must receive one spoken response. This includes a short
   clarification such as "E-1", "the stem thickness", "yes", or "go". For every site-detail
   turn, call `check_observation` first; never wait silently for the manager to repeat it.

@@ -38,6 +38,10 @@ def _compact(turn: dict) -> dict:
     res = turn.get("resolved", {}) or {}
     return {
         "state": turn["state"],
+        # The deterministic engine owns the demo-safe wording as well as the
+        # safety decision.  Supplying it to the voice model prevents a
+        # paraphrase from dropping a revision, tolerance, or available action.
+        "spoken_reply": (turn.get("reply") or {}).get("text", ""),
         "contradictions": [{"kind": k["kind"], "detail": k["detail"], "evidence": k.get("evidence", {})}
                            for k in turn.get("contradictions", [])],
         "blockers": [{"kind": k["kind"], "detail": k["detail"], "evidence": k.get("evidence", {})}
