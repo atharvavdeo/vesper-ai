@@ -141,7 +141,7 @@ export default function EnrollScreen({
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div id="tour-enroll" className="flex flex-col gap-4">
       {/* Header section */}
       <div className="flex items-center justify-between px-1">
         <div>

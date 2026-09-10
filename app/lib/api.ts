@@ -1,4 +1,5 @@
-// Small fetch helper — all backend calls go through here.
+// Small fetch helper — all backend calls go through here (or to the /demo mock).
+import { isDemo, mockReq } from "./demo";
 // Base URL from env, default to local backend.
 
 export const API_BASE =
@@ -139,6 +140,13 @@ class ApiError extends Error {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  if (isDemo()) {
+    try {
+      return (await mockReq(path, init)) as T;
+    } catch (e) {
+      throw new ApiError((e as Error).message, (e as { status?: number }).status ?? 500);
+    }
+  }
   let res: Response;
   try {
     const headers = await authHeaders(init?.headers);
@@ -297,6 +305,7 @@ export const api = {
     text: string,
     language: "en-IN" | "hi-IN" = "en-IN",
   ): Promise<{ ok: true; blob: Blob } | { ok: false; reason: string }> {
+    if (isDemo()) return { ok: false, reason: "demo" }; // demo speaks with the browser voice
     let res: Response;
     try {
       res = await fetch(`${API_BASE}/api/tts`, {

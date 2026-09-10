@@ -48,16 +48,11 @@ def _v(s: dict, k: str):
 def loc_label(c, s: dict) -> str:
     loc = c.location
     if loc:
-        if loc.get("grid") and loc["grid"] != "Slab":
-            head = loc["grid"]
-        elif loc.get("zone"):
-            head = loc["zone"]
-        elif loc.get("grid") == "Slab":
-            head = "Slab"
-        else:
-            head = loc["location_id"]
-        if loc.get("grid") == "Slab":
+        seg = loc["location_id"].split(":")[1] if ":" in loc["location_id"] else loc["location_id"]
+        if (loc.get("grid") or seg) == "Slab":
             return f"{level_label(loc.get('level'))} slab"
+        head = loc.get("grid") or loc.get("zone") or seg
+        head = re.sub(r"^Zone([A-Z])$", r"Zone \1", head)
         return f"{head}, {level_label(loc.get('level'))}"
     return ", ".join(x for x in [_v(s, "grid") or _v(s, "zone"), level_label(_v(s, "level"))] if x)
 

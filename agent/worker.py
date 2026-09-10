@@ -35,6 +35,7 @@ from livekit.agents import RunContext, llm  # noqa: E402
 from livekit.plugins import groq, openai, rime, silero  # noqa: E402
 
 from engine_bridge import Brain  # noqa: E402
+from engine.memory import greeting  # noqa: E402
 from voiceprofile import VoiceProfiler  # noqa: E402
 
 logger = logging.getLogger("vesper.agent")
@@ -107,30 +108,6 @@ def _tts():
     # English, low latency: mistv3 over websocket cuts first-audio delay.
     return rime.TTS(model="mistv3", speaker=os.getenv("RIME_SPEAKER_EN", "cove"), lang="eng",
                     api_key=os.getenv("RIME_API_KEY"), use_websocket=True)
-
-
-def _first_sentence(s: str, n: int = 140) -> str:
-    s = (s or "").strip().split(". ")[0]
-    return s if len(s) <= n else s[:n].rsplit(" ", 1)[0]
-
-
-def greeting(brief: dict) -> str:
-    """Deterministic opener from site memory — no LLM, so the room never starts silent."""
-    logs = brief.get("recent_daily_logs") or []
-    parts = ["Vesper here."]
-    if logs:
-        parts.append(f"Last site day, {_first_sentence(logs[0].get('work_done', ''), 90)}.")
-    hold = next(iter(brief.get("open_hold_points") or []), None)
-    permit = next((p for p in brief.get("active_permits") or [] if p.get("unsatisfied_mandatory_checks")), None)
-    rfi = next((r for r in brief.get("open_rfis") or [] if r.get("status") == "Open"), None)
-    if hold:
-        parts.append(f"Hold point {hold['instance_id']} at {hold['location_id'].split(':', 1)[1].replace(':', ' ')} is still not released.")
-    elif permit:
-        parts.append(f"Permit {permit['permit_id']} still has mandatory checks pending.")
-    elif rfi:
-        parts.append(f"{rfi['rfi_id']} is still open.")
-    parts.append("What are you looking at?")
-    return " ".join(parts)
 
 
 class VesperAgent(Agent):

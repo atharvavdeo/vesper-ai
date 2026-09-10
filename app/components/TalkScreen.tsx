@@ -11,6 +11,7 @@ import {
 import { Card, Chip, ErrorBanner, Button, WaveVisualizer, VesperLogo } from "@/components/ui";
 import CommandLimitReached from "@/components/CommandLimitReached";
 import ConversationHistory from "@/components/ConversationHistory";
+import { DEMO_PROMPTS, isDemo } from "@/lib/demo";
 
 const DECISION_LABELS: Record<DecisionKey, string> = {
   log_observation: "Log observation",
@@ -20,7 +21,7 @@ const DECISION_LABELS: Record<DecisionKey, string> = {
   cancel: "Cancel",
 };
 
-const SUGGESTED_QUESTIONS = [
+const LIVE_SUGGESTED = [
   "What should I check before the L4 slab pour?",
   "What is the cover at E-1?",
   "Any open RFIs?",
@@ -191,7 +192,7 @@ export default function TalkScreen({
         return;
       }
       // Fallback path.
-      setTtsMissing(true);
+      setTtsMissing(out.reason === "rime key missing");
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         const u = new SpeechSynthesisUtterance(text);
         const voices = window.speechSynthesis.getVoices();
@@ -402,6 +403,13 @@ export default function TalkScreen({
     };
   }, []);
 
+  // The /demo tour drives a prompt through Talk so its "Choose" step has options to show.
+  useEffect(() => {
+    const onSend = (e: Event) => void sendTurn({ text: String((e as CustomEvent).detail ?? ""), bargeIn: false });
+    window.addEventListener("vesper-demo-send", onSend);
+    return () => window.removeEventListener("vesper-demo-send", onSend);
+  }, [sendTurn]);
+
   const submitTyped = () => {
     if (!typed.trim()) return;
     maybeBargeIn();
@@ -567,7 +575,7 @@ export default function TalkScreen({
       {!exhausted ? (
         <div id="workflow-suggestions" className="flex flex-wrap gap-1.5 px-1">
           <span className="w-full text-[10px] font-mono uppercase tracking-wider text-zinc-500">Try</span>
-          {SUGGESTED_QUESTIONS.map((question) => (
+          {(isDemo() ? DEMO_PROMPTS : LIVE_SUGGESTED).map((question) => (
             <button
               key={question}
               type="button"
@@ -697,7 +705,7 @@ export default function TalkScreen({
 
       {/* Options: answer Vesper's question or decide, with one tap */}
       {!decisionResult && (replies.length || allowed.length) ? (
-        <div className="glass-panel p-3 flex flex-col gap-2">
+        <div id="tour-talk-choose" className="glass-panel p-3 flex flex-col gap-2">
           <span className="text-[10px] font-mono tracking-wider uppercase text-zinc-400">Choose</span>
           {replies.length ? (
             <div className="flex flex-wrap gap-1.5">

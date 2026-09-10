@@ -1,109 +1,156 @@
-# Vesper — demo script (live mic, ~3 min)
+# Vesper — demo guide
 
-The point: **the agent already knows this site.** It opens by referring to yesterday's work
-and what's blocked, you continue the conversation from there, and every number it says comes
-out of the project database — never invented.
+**The pitch in one line:** a voice colleague that already knows the site, answers from the
+record, and *argues with you* before a wrong number becomes a log.
 
-## Before you start
+Two ways to show it:
 
-```bash
-python3 data/build_db.py     # clean baseline (2 seed observations, 5 DPRs, 10 RFIs)
-./run-all.sh                 # voiceid :8788 · backend :8000 · frontend :3000
-cd agent && ./run.sh         # the LiveKit voice agent (separate terminal)
-curl -s localhost:8000/api/health
-```
-Open **http://localhost:3000** in Chrome. Go to **Enroll**, record 3 samples of your voice
-(this is what the speaker gate checks against). Then **Live**.
+| | What | Needs |
+| --- | --- | --- |
+| **Recorded demo** | [`/demo`](http://localhost:3000/demo) — the full console on recorded engine output, with a guided tour | Nothing. No sign-in, no keys, nothing is written. |
+| **Live demo** | `/app` — real voice over LiveKit, Rime speech, speaker-ID gate | Backend, agent, voiceid, keys (see README §5) |
+
+Every reply in the recorded demo is **real engine output**: `scripts/build_demo_data.py` runs the
+conversations below through `backend/engine` against a copy of `data/site.db`. Re-run it after
+changing the engine or the seed so the demo never drifts from the product.
+
+<p align="center">
+  <img src="docs/media/screens/landing-hero.jpg" width="880" alt="Vesper landing page hero"/>
+</p>
+
+---
 
 ## The site, as of the demo
 
-Tower B, Residential G+12, Hinjewadi Pune. Latest site day **9 Sep 2026**.
-- L4 slab pre-pour is on **HOLD** (`CL-PP-L4-001`) — cover shortfall at 3 spots, **RFI-050** open
-- Hot-work permit **HWP-0112** at Zone B L3 is Active but the **fire-watch checks are unsatisfied**
-- `A-102` is at **R4** (12 Aug, via **RFI-047**) — C-5 rebar spacing **180 mm ±10**
-- `S-301` is at **R2** — L4 slab thickness **150 mm ±5** (R1 said 125)
+`P1` — **Pithoragarh District Hospital & Staff Quarters** (synthetic, for repeatable testing).
+
+- **L4 slab pre-pour is on HOLD** (`CL-PP-L4-001`) — cover shortfall at 3 locations, **RFI-050** open
+- **Hot-work permit HWP-0112** (Zone B, L3) is active but the **fire watcher isn't assigned**
+- **E-1 / E-2 columns** (OPD / Maternity) — cover **40 mm ± 5** on **A-201 R1** (26 Aug, IS 456 Cl. 26.4)
+- **RW-1 retaining wall** — **C-401 R2** (4 Sep, via **RFI-060**) is current; R1 is superseded
+- Excavation permit **EXC-0041** at RW-1 is **suspended** until shoring is inspected
 
 ---
 
-## Script
+## Script (~3 minutes)
 
 ### 0:00 — It opens with memory, not a menu
-Click **Start conversation** → **Tap to enable audio**.
+**Live → Start conversation.** Vesper speaks first, from the site brief — no LLM involved:
 
-It greets you with the real state of the job — something like *"Yesterday you were on L4 slab
-top bars and the pre-pour is still on hold over the cover shortfall, RFI fifty is open. What
-are you looking at?"*
+> *"Vesper here. Last site day, C-401 R2 retaining-wall revision issued to the crew. Hold point
+> CL-PP-L4-001 at Slab L4 is still not released. What are you looking at?"*
 
-> Say out loud: "Notice it didn't ask me who I am or what project this is. It read the last
-> three daily progress reports, the open RFIs and the hold points before it said a word."
+Open **Site memory** to show exactly what it is working from.
 
-Point at the **Site memory** panel — that's exactly what it's working from.
+<p>
+  <img src="docs/media/screens/app-live-replay.jpg" width="260" alt="Live replay"/>
+  <img src="docs/media/screens/app-live-memory.jpg" width="260" alt="Site memory panel"/>
+</p>
 
-### 0:30 — Ask it about the past
-> **"Why is the L4 slab pour on hold?"**
+### 0:30 — Ask it things. Follow-ups keep context.
+> **"What should I check before the L4 slab pour?"** → the hold point items, RFI-050, then the S-301 R2 slab facts.
+>
+> **"What is the cover at E-1?"** → *40 mm ± 5, per A-201 R1 issued 26 August (IS 456 Cl. 26.4).*
+>
+> **"and at E-2?"** → same answer for E-2 — it remembered you were asking about cover.
+>
+> **"Any open RFIs?"** → RFI-049, RFI-050, RFI-055, RFI-061.
 
-It calls `recall`, and answers from the DPRs + RFIs + submittals: cover shortfall at three
-locations, RFI-050 conduit reroute still open, consultant release pending, SUB-004 method
-statement under review.
+Questions go straight to the engine (~5 ms on SQLite) and are spoken by Rime. The LLM is only
+consulted when the record has no answer.
 
-> **"What did we do on C-5?"**
+<img src="docs/media/screens/app-talk-answer.jpg" width="260" alt="Answers from the record"/>
 
-Cage completed 6 Sep with ties at 180 c/c, poured 8 Sep, RFI-047 was the clarification that
-moved A-102 to R4.
+### 1:15 — The core: it challenges you
+> **"E-1 column cover measured 30 mm."**
 
-### 1:15 — The core feature: it challenges you
-> **"Column C-5, rebar spacing one eighty millimetres, drawing A-102 revision three."**
+It stops you: *"You reported cover at E-1, Level 1 as 30 mm, but A-201 R1 shows 40 mm, with a
+tolerance of plus or minus 5. Would you like to log the observation, raise an RFI, or raise an NCR?"*
 
-It stops you: A-102's latest For-Construction revision is **R4**, issued 12 August, driven by
-**RFI-047**; R3 is superseded. Your 180 matches R4 — the *revision reference* is what's stale.
+> **"What's the tolerance there?"** — it answers *about the pending observation* without losing it.
+>
+> **"Raise an NCR."** (or tap **Raise NCR**) → logged, linked to A-201 R1, with the clarification it spoke.
 
-> **"Log it."**
+<p>
+  <img src="docs/media/screens/app-live-challenge.jpg" width="260" alt="Contradiction with evidence"/>
+  <img src="docs/media/screens/app-talk-challenge.jpg" width="260" alt="Talk: choose panel"/>
+  <img src="docs/media/screens/app-talk-logged.jpg" width="260" alt="Logged NCR"/>
+</p>
 
-Logged. Open the **Logs** tab: the row is linked to **A-102@R4** — never R3 — with
-`revision_claimed: R3` preserved as what you actually said.
+### 1:50 — Stale revision
+> **"RW-1 wall thickness 350 mm as per C-401 revision R1."**
 
-> Say out loud: "It logged what I observed, against the drawing that's actually in force."
+The value matches, the *reference* is stale: C-401 is at **R2** (4 Sep, via RFI-060). **Log it** →
+the row links to **C-401@R2**, never R1, and keeps `revision_claimed: R1` as what you said.
 
-### 2:00 — It refuses when the site is unsafe
-> **"There's welding going on at Zone B level 3, everything looks fine, log it as OK."**
+### 2:10 — It refuses when the site is unsafe
+> **"Welding at Zone B level 3, everything looks fine, log it."**
 
-It blocks: permit **HWP-0112** is active but the fire-watch checks are unsatisfied — a fire
-watcher isn't assigned, and post-work fire watch isn't covered. Only *stop work / raise NCR /
-cancel* are allowed. A "work OK" observation is never written.
+Blocked: HWP-0112 has mandatory checks pending — fire watcher assigned, 60-minute post-work
+watch. Only **stop work · NCR · cancel** are offered; a "work OK" log is never written.
 
-> **"Stop the work then."**
+> **"Start the L4 slab pour now."** → blocked by the unreleased pre-pour hold point.
 
-Logged as `stop_work`.
+<img src="docs/media/screens/app-talk-permit-blocker.jpg" width="260" alt="Permit blocker"/>
 
-### 2:40 — Interrupt it
-Start a new observation and **talk over it mid-sentence** — it stops instantly and follows you.
-That's the barge-in path (silero VAD + LiveKit turn detection).
+### 2:35 — Only the enrolled manager can write
+Have a colleague say **"log it"**. The speaker gate (SpeechBrain ECAPA, local) doesn't match their
+voice, so the write is refused — the conversation continues, nothing is logged. In testing the
+enrolled voice scored **0.86**, a different voice **0.04** (threshold 0.70).
+
+### 2:45 — Noise and interruptions
+Tap the **mic button** to mute *yourself* while a grinder runs. Talk over Vesper mid-sentence and
+it stops; a short clang doesn't (≥ 0.6 s and two words are needed to interrupt).
 
 ### 2:50 — Proof it isn't cherry-picked
-**Scenarios** tab → **Run all** → **10 / 10 PASS**, *wrong drawing/dimension/location logs: 0*.
+**Scenarios → Run All** → **10 / 10 pass, 0 wrong logs.**
 
-> "Ten scripted site conversations, including deliberate errors and mid-sentence corrections.
-> Every contradiction was spoken before anything was logged, and nothing was ever logged
-> against the wrong revision."
+<p>
+  <img src="docs/media/screens/app-logs.jpg" width="260" alt="Logs with evidence"/>
+  <img src="docs/media/screens/app-scenarios.jpg" width="260" alt="Scenarios 10/10"/>
+  <img src="docs/media/screens/app-enroll.jpg" width="260" alt="Voice enrollment"/>
+</p>
 
 ---
+
+## Guided tour
+
+The console runs a 13-step tour on first visit (tap **Guide** to replay). It hops across Live,
+Talk, Logs, Scenarios and Enroll, skips the replay so later steps have content, runs a sample
+prompt so the **Choose** panel has options, and runs the scenario suite for the proof step.
+
+<p>
+  <img src="docs/media/screens/tour-01-welcome.jpg" width="200" alt="Tour welcome"/>
+  <img src="docs/media/screens/tour-05-evidence.jpg" width="200" alt="Tour: safety gate"/>
+  <img src="docs/media/screens/tour-09-choose.jpg" width="200" alt="Tour: choose"/>
+  <img src="docs/media/screens/tour-11-scenarios.jpg" width="200" alt="Tour: proof"/>
+</p>
+
+---
+
+## Before a live demo
+
+```bash
+python3 data/build_db.py            # clean baseline
+./run-all.sh                        # voiceid :8788 · backend :8000 · frontend :3000
+cd agent && ./run.sh                # LiveKit voice agent (separate terminal)
+curl -s localhost:8000/api/health   # expect "llm":"cerebras", "voiceid":true
+```
+
+Enroll your voice (**Enroll**, three samples) before you try to log anything — with speaker ID on,
+writes are locked until your voice is verified.
+
+## Refresh the recorded demo and screenshots
+
+```bash
+backend/.venv/bin/python scripts/build_demo_data.py      # regenerate app/lib/demo-data.json
+python3 scripts/capture_screens.py http://localhost:3000  # docs/media/screens/*.jpg (needs Chrome)
+python3 scripts/capture_screens.py http://localhost:3000 tour   # just the tour shots
+```
 
 ## If someone asks "is the LLM making this up?"
 
-No. The LLM only phrases. Every drawing number, revision, date, RFI and measurement comes from
-a tool result: `check_observation` runs the deterministic engine (`backend/engine/`) against
-`data/site.db`; `recall` queries project history. `persist.py` re-verifies before every write —
-it refuses to log a superseded drawing, an unknown location, or an unconfirmed critical field.
-
-## Voice / speaker gate
-
-Every ~4 s the agent verifies the live mic against your enrolled voiceprint (SpeechBrain
-ECAPA-TDNN, running locally in `voiceid/`). If someone else speaks, the logging tools refuse —
-the conversation continues, but nothing gets written. Demo it by having a colleague say
-"log it".
-
-## Fallbacks if the room is noisy
-
-- Threshold too tight/loose → `SPEAKER_ID_THRESHOLD` in `.env`
-- Reset between rehearsals → `python3 data/build_db.py`, then restart the backend and agent
-  (both hold a SQLite connection)
+No. Every drawing, revision, date, RFI and measurement comes from the deterministic engine over
+`data/site.db`. Questions are answered by `engine/answer.py`; observations are checked by
+`engine/contradictions.py`; `db.insert_observation` re-verifies before every write and refuses a
+superseded drawing, an unknown location, or an unconfirmed critical field.

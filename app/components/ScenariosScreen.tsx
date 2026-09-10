@@ -38,6 +38,7 @@ export default function ScenariosScreen() {
           </h2>
         </div>
         <Button
+          id="tour-scenarios-run"
           variant="solid"
           size="sm"
           onClick={run}
@@ -57,7 +58,7 @@ export default function ScenariosScreen() {
 
       {/* Summary Scorecard Cards */}
       {data ? (
-        <div className="grid grid-cols-3 gap-2">
+        <div id="tour-scenarios" className="grid grid-cols-3 gap-2">
           <Card tone={data.passed === data.total ? "green" : "neutral"} className="text-center p-3">
             <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 block mb-1">
               Passed

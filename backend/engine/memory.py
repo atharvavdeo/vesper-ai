@@ -275,3 +275,28 @@ def _facts_for_query(repo, q: str) -> list[dict]:
              "unit": r.get("unit"), "tolerance": r.get("tolerance"),
              "drawing": f"{r['drawing_number']} {r['revision']}", "issued_on": r.get("issued_on"),
              "via_rfi": r.get("via_rfi"), "code_ref": r.get("code_ref")} for r in rows[:8]]
+
+
+def _first_sentence(s: str, n: int = 90) -> str:
+    s = (s or "").strip().split(". ")[0]
+    return s if len(s) <= n else s[:n].rsplit(" ", 1)[0]
+
+
+def greeting(brief: dict) -> str:
+    """Deterministic spoken opener from the site brief — no LLM, so a room never starts silent."""
+    logs = brief.get("recent_daily_logs") or []
+    parts = ["Vesper here."]
+    if logs:
+        parts.append(f"Last site day, {_first_sentence(logs[0].get('work_done', ''))}.")
+    hold = next(iter(brief.get("open_hold_points") or []), None)
+    permit = next((p for p in brief.get("active_permits") or [] if p.get("unsatisfied_mandatory_checks")), None)
+    rfi = next((r for r in brief.get("open_rfis") or [] if r.get("status") == "Open"), None)
+    if hold:
+        where = hold["location_id"].split(":", 1)[1].replace(":", " ")
+        parts.append(f"Hold point {hold['instance_id']} at {where} is still not released.")
+    elif permit:
+        parts.append(f"Permit {permit['permit_id']} still has mandatory checks pending.")
+    elif rfi:
+        parts.append(f"{rfi['rfi_id']} is still open.")
+    parts.append("What are you looking at?")
+    return " ".join(parts)

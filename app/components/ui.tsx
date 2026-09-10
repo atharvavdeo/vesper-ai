@@ -154,7 +154,9 @@ export function Button({
   className = "",
   size = "md",
   type = "button",
+  id,
 }: {
+  id?: string;
   variant?: "solid" | "ghost";
   children: ReactNode;
   onClick?: () => void;
@@ -174,6 +176,7 @@ export function Button({
 
   return (
     <button
+      id={id}
       type={type}
       onClick={onClick}
       disabled={disabled}

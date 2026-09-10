@@ -107,6 +107,23 @@ provider can no longer leave the live conversation silent.
 
 ---
 
+## Screens
+
+<p align="center">
+  <img src="docs/media/screens/landing-hero.jpg" width="820" alt="Landing hero"/>
+</p>
+<p align="center">
+  <img src="docs/media/screens/app-live-challenge.jpg" width="200" alt="Live: contradiction with evidence"/>
+  <img src="docs/media/screens/app-talk-answer.jpg" width="200" alt="Talk: answers from the record"/>
+  <img src="docs/media/screens/app-talk-permit-blocker.jpg" width="200" alt="Talk: permit blocker"/>
+  <img src="docs/media/screens/tour-05-evidence.jpg" width="200" alt="Guided tour"/>
+</p>
+
+Try it without signing in at **`/demo`** — the full console on recorded engine output, with a
+guided tour. The walkthrough and every screenshot are in [DEMO.md](DEMO.md).
+
+---
+
 ## 4. Tech Stack
 
 | Layer | Technology | Role |

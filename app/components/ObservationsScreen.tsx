@@ -88,10 +88,10 @@ export default function ObservationsScreen() {
       ) : null}
 
       <div className="space-y-2.5">
-        {rows?.map((r) => {
+        {rows?.map((r, i) => {
           const isOpen = openId === r.observation_id;
           return (
-            <div key={r.observation_id} className="flex flex-col gap-1.5">
+            <div key={r.observation_id} id={i === 0 ? "tour-logs" : undefined} className="flex flex-col gap-1.5">
               <div
                 onClick={() => openDetail(r.observation_id)}
                 className="cursor-pointer"
