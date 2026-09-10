@@ -11,3 +11,5 @@ detail pages: 550 total, 27 cached, 523 to fetch
   150/523 {'firecrawl': 150, 'http': 0, 'cached': 3, 'failed': 0}
   175/523 {'firecrawl': 175, 'http': 0, 'cached': 3, 'failed': 0}
   200/523 {'firecrawl': 200, 'http': 0, 'cached': 3, 'failed': 0}
+  225/523 {'firecrawl': 222, 'http': 0, 'cached': 6, 'failed': 0}
+  250/523 {'firecrawl': 242, 'http': 2, 'cached': 9, 'failed': 0}

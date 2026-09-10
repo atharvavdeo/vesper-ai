@@ -38,6 +38,8 @@ type EngineResolved = {
 };
 type EngineResult = {
   state?: string;
+  /** Deterministic, safety-checked wording sent by the engine with every turn. */
+  spoken_reply?: string;
   contradictions?: EngineContradiction[];
   blockers?: EngineBlocker[];
   missing?: EngineMissing[];
@@ -248,6 +250,9 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
   const [engine, setEngine] = useState<EngineResult | null>(null);
   const [brief, setBrief] = useState<SiteBrief | null>(null);
   const [remoteAudioMuted, setRemoteAudioMuted] = useState(false);
+  const [engineReplies, setEngineReplies] = useState<
+    { text: string; ts: number; id: string }[]
+  >([]);
 
   const micTrackRef = useMemo<TrackReferenceOrPlaceholder | undefined>(() => {
     if (!localParticipant) return undefined;
@@ -267,7 +272,20 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
         result?: EngineResult;
         brief?: SiteBrief;
       };
-      if (d.type === "engine" && d.result) setEngine(d.result);
+      if (d.type === "engine" && d.result) {
+        setEngine(d.result);
+        const reply = d.result.spoken_reply?.trim();
+        // The voice LLM can be temporarily rate-limited. The engine has already
+        // completed the safety check, so surface its approved response directly
+        // rather than leaving a live demo looking stuck.
+        if (reply) {
+          setEngineReplies((current) => {
+            const last = current.at(-1);
+            if (last?.text === reply) return current;
+            return [...current, { text: reply, ts: Date.now(), id: `engine-${Date.now()}` }];
+          });
+        }
+      }
       if (d.type === "brief" && d.brief) setBrief(d.brief);
     } catch {
       /* ignore malformed */
@@ -298,6 +316,9 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
         id: `a-${s.id}`,
       });
     }
+    for (const r of engineReplies) {
+      rows.push({ who: "Vesper", text: r.text, ts: r.ts, id: r.id });
+    }
     rows.sort((a, b) => a.ts - b.ts);
 
     const displayed: typeof rows = [];
@@ -312,7 +333,7 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
       if (!duplicate) displayed.push(row);
     }
     return displayed;
-  }, [userSegments, agentTranscriptions]);
+  }, [userSegments, agentTranscriptions, engineReplies]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {

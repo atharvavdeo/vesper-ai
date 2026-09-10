@@ -1,4 +1,4 @@
-#!/home/bhavik/Tech/Hackathons/DataForge_Rime/vesper-ai/agent/.venv/bin/python3.12
+#!/Users/atharvadeo/Documents/VoiceAgent/agent/.venv/bin/python3.13
 import sys
 from charset_normalizer.cli import cli_detect
 if __name__ == '__main__':

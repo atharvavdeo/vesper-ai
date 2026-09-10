@@ -4,7 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 if [ ! -x .venv/bin/python ]; then
-  "${PYTHON:-$HOME/.local/bin/python3.12}" -m venv .venv
+  PYTHON_BIN="${PYTHON:-$HOME/.local/bin/python3.12}"
+  if [ ! -x "$PYTHON_BIN" ]; then
+    PYTHON_BIN="$(command -v python3)"
+  fi
+  "$PYTHON_BIN" -m venv .venv
   .venv/bin/pip -q install --upgrade pip
   .venv/bin/pip -q install -r requirements.txt
 fi

@@ -1,4 +1,4 @@
-#!/home/bhavik/Tech/Hackathons/DataForge_Rime/vesper-ai/backend/.venv/bin/python3.12
+#!/Users/atharvadeo/Documents/VoiceAgent/backend/.venv/bin/python3.13
 # -*- coding: utf-8 -*-
 import re
 import sys
