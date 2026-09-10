@@ -273,25 +273,44 @@ function RoomView({ room, onEnd }: { room: string; onEnd: () => void }) {
     }
   });
 
-  // merged, time-ordered transcript
+  // Merged, time-ordered transcript. LiveKit emits interim revisions as well as final
+  // segments; rendering both makes one spoken sentence look like several user messages.
+  // Keep final segments only and collapse protocol-level duplicate finals by content.
   const transcript = useMemo(() => {
     const rows: { who: "You" | "Vesper"; text: string; ts: number; id: string }[] =
       [];
-    for (const s of userSegments)
+    for (const s of userSegments) {
+      if (!s.final || !s.text.trim()) continue;
       rows.push({
         who: "You",
         text: s.text,
         ts: s.firstReceivedTime ?? 0,
         id: `u-${s.id}`,
       });
-    for (const s of agentTranscriptions)
+    }
+    for (const s of agentTranscriptions) {
+      if (!s.final || !s.text.trim()) continue;
       rows.push({
         who: "Vesper",
         text: s.text,
         ts: s.firstReceivedTime ?? 0,
         id: `a-${s.id}`,
       });
-    return rows.sort((a, b) => a.ts - b.ts);
+    }
+    rows.sort((a, b) => a.ts - b.ts);
+
+    const displayed: typeof rows = [];
+    for (const row of rows) {
+      const previous = displayed.at(-1);
+      const currentText = row.text.trim().replace(/\s+/g, " ").toLowerCase();
+      const previousText = previous?.text.trim().replace(/\s+/g, " ").toLowerCase();
+      const duplicate = previous
+        && previous.who === row.who
+        && currentText === previousText
+        && Math.abs(row.ts - previous.ts) < 10_000;
+      if (!duplicate) displayed.push(row);
+    }
+    return displayed;
   }, [userSegments, agentTranscriptions]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
