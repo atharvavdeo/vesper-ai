@@ -136,17 +136,20 @@ export default function ConversationScreen() {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [is503, setIs503] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
 
   const start = useCallback(async () => {
     setConnecting(true);
     setError(null);
     setIs503(false);
+    setLimitReached(false);
     try {
       const t = await api.rtcToken({ name: "Manager" });
       setCreds(t);
     } catch (e) {
       const err = e as Error;
       if (e instanceof ApiError && e.status === 503) setIs503(true);
+      if (e instanceof ApiError && e.status === 429) setLimitReached(true);
       setError(err.message);
     } finally {
       setConnecting(false);
@@ -211,6 +214,11 @@ export default function ConversationScreen() {
             {is503 ? (
               <p className="text-center text-xs text-amber-400 font-mono">
                 LiveKit is not configured — check LIVEKIT_* in your .env file
+              </p>
+            ) : null}
+            {limitReached ? (
+              <p className="text-center text-xs text-sky-200 font-mono">
+                Thank you — your three complimentary Vesper commands are complete. Review your conversation archive in Talk.
               </p>
             ) : null}
           </div>
