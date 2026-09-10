@@ -2,30 +2,441 @@
 
 :root {
   --background: #000000;
-  --foreground: #f4f4f5;
+  --foreground: #ffffff;
+  --bg: #000000;
+  --text: #ffffff;
+  --muted: #9a9a9a;
+  --stat: #d8d8d8;
+  --border: rgba(255, 255, 255, 0.16);
+  --border-soft: rgba(255, 255, 255, 0.10);
+
+  --glass-bg: linear-gradient(160deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.022) 42%, rgba(140, 150, 170, 0.06) 100%);
+  --glass-edge: linear-gradient(135deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.13) 30%, rgba(255, 255, 255, 0.09) 62%, rgba(200, 210, 230, 0.32) 100%);
+
+  --red: #ff5a4e;
+  --amber: #f2b441;
+  --green: #7ee2a8;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: var(--font-instrument-serif), "Instrument Serif", "Times New Roman", serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", monospace;
 }
 
 html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  background: #000000 !important;
+  color: #ffffff;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+  position: relative;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* keep the app in a phone-width column, centered on larger screens */
+/* Subtle Film Grain */
+.grain {
+  position: fixed;
+  inset: -60%;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+  animation: grain 1.2s steps(6) infinite;
+  will-change: transform;
+}
+
+@keyframes grain {
+  0% { transform: translate3d(0, 0, 0); }
+  20% { transform: translate3d(-4%, 3%, 0); }
+  40% { transform: translate3d(3%, -5%, 0); }
+  60% { transform: translate3d(-6%, -2%, 0); }
+  80% { transform: translate3d(5%, 4%, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+/* App Shell container */
 .app-shell {
   width: 100%;
-  max-width: 430px;
+  max-width: 460px;
   margin-inline: auto;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 1;
+}
+
+@media (min-width: 640px) {
+  .app-shell {
+    min-height: calc(100dvh - 48px);
+    margin-block: 24px;
+    border-radius: 36px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: radial-gradient(120% 60% at 50% 0%, #111111 0%, #060606 55%, #020202 100%);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 35px 80px -20px rgba(0, 0, 0, 0.95), 0 0 60px rgba(170, 190, 230, 0.08);
+    padding: 16px;
+    overflow: hidden;
+  }
+}
+
+/* Glassmorphism Surface */
+.glass-panel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  background: var(--glass-bg) padding-box, #060606 padding-box, var(--glass-edge) border-box;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 20px 40px -20px rgba(0, 0, 0, 0.9);
+  transition: box-shadow 0.35s ease, border-color 0.35s ease, transform 0.35s var(--ease);
+}
+
+.glass-panel-hoverable:hover {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 0 28px rgba(170, 200, 255, 0.08), 0 20px 40px -20px rgba(0, 0, 0, 0.9);
+}
+
+/* Tone variants for glass cards */
+.glass-panel-red {
+  border-color: transparent !important;
+  background: linear-gradient(135deg, rgba(255,90,78,0.18), rgba(30,6,5,0.7) 60%, rgba(255,90,78,0.06)) padding-box, #070303 padding-box, linear-gradient(135deg, rgba(255,90,78,0.65), rgba(255,255,255,0.08) 45%, rgba(255,90,78,0.25)) border-box !important;
+  box-shadow: 0 0 24px rgba(255, 90, 78, 0.14), inset 0 1px 0 rgba(255, 90, 78, 0.3);
+}
+
+.glass-panel-amber {
+  border-color: transparent !important;
+  background: linear-gradient(135deg, rgba(242,180,65,0.16), rgba(35,24,5,0.7) 60%, rgba(242,180,65,0.05)) padding-box, #070502 padding-box, linear-gradient(135deg, rgba(242,180,65,0.6), rgba(255,255,255,0.08) 45%, rgba(242,180,65,0.25)) border-box !important;
+  box-shadow: 0 0 24px rgba(242, 180, 65, 0.12), inset 0 1px 0 rgba(242, 180, 65, 0.25);
+}
+
+.glass-panel-green {
+  border-color: transparent !important;
+  background: linear-gradient(135deg, rgba(126,226,168,0.16), rgba(5,28,14,0.7) 60%, rgba(126,226,168,0.05)) padding-box, #020704 padding-box, linear-gradient(135deg, rgba(126,226,168,0.55), rgba(255,255,255,0.08) 45%, rgba(126,226,168,0.22)) border-box !important;
+  box-shadow: 0 0 24px rgba(126, 226, 168, 0.14), inset 0 1px 0 rgba(126, 226, 168, 0.3);
+}
+
+/* Liquid Metal & Glass Buttons */
+.btn-base {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 7px;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, color 0.35s ease, transform 0.15s ease;
+}
+
+.btn-base::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.45) 48%, transparent 76%);
+  transform: translateX(-130%);
+  transition: transform 0.65s ease;
+}
+
+.btn-base:hover::after,
+.btn-base:focus-visible::after {
+  transform: translateX(130%);
+}
+
+.btn-base:active {
+  transform: scale(0.97);
+}
+
+.btn-solid-liquid {
+  background: linear-gradient(180deg, #ffffff 0%, #e7e7e7 48%, #cfcfcf 100%);
+  color: #111111;
+  border: 1px solid #ffffff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.btn-solid-liquid:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #f3f6ff 42%, #d5def2 100%);
+  border-color: #f2f6ff;
+  box-shadow: inset 0 1px 0 #ffffff, 0 0 22px rgba(186, 208, 255, 0.35), 0 6px 16px rgba(255, 255, 255, 0.1);
+}
+
+.btn-ghost-liquid {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.45) 50%, rgba(160, 175, 200, 0.06));
+  color: #ffffff;
+  border: 1px solid rgba(198, 198, 198, 0.38);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.btn-ghost-liquid:hover {
+  background: linear-gradient(135deg, rgba(210, 225, 255, 0.16), rgba(0, 0, 0, 0.35) 48%, rgba(180, 195, 220, 0.14));
+  border-color: rgba(220, 230, 255, 0.7);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 20px rgba(170, 200, 255, 0.18);
+}
+
+/* Nav Pill (Liquid Metal from landing header) */
+.nav-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(198, 198, 198, 0.35);
+  background: linear-gradient(105deg, #050505 0%, #202020 50%, #3a3a3a 100%);
+  color: #c8c8c8;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition: all 0.3s ease;
+}
+
+.nav-pill::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.16) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform 0.6s ease;
+  pointer-events: none;
+}
+
+.nav-pill:hover::before,
+.nav-pill[aria-selected="true"]::before {
+  transform: translateX(120%);
+}
+
+.nav-pill[aria-selected="true"] {
+  border-color: rgba(235, 235, 235, 0.9);
+  background: linear-gradient(105deg, #121212 0%, #353535 48%, #5a5a5a 100%);
+  color: #ffffff;
+  font-weight: 500;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 18px rgba(200, 210, 230, 0.2);
+}
+
+/* Status Pill (.p-live) */
+.p-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #d8d8d8;
+  white-space: nowrap;
+}
+
+.p-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: blink 1.4s ease-in-out infinite;
+}
+
+.p-live-dot.dot-amber {
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--amber);
+}
+
+.p-live-dot.dot-red {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+}
+
+@keyframes blink {
+  50% { opacity: 0.35; }
+}
+
+/* Push to Talk Mic with Concentric Radar Rings */
+.mic-shell {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: grid;
+  place-items: center;
+  margin-inline: auto;
+}
+
+.mic-circle {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #ffffff 0%, #e8e8e8 48%, #cecece 100%);
+  color: #111111;
+  border: 1px solid #ffffff;
+  box-shadow: inset 0 1px 0 #ffffff, 0 0 28px rgba(186, 208, 255, 0.3), 0 12px 28px -8px rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.3s ease, background 0.3s ease;
+  z-index: 2;
+}
+
+.mic-circle:hover {
+  transform: scale(1.03);
+  box-shadow: inset 0 1px 0 #ffffff, 0 0 36px rgba(186, 208, 255, 0.5), 0 14px 32px -8px rgba(0, 0, 0, 0.8);
+}
+
+.mic-circle:active {
+  transform: scale(0.96);
+}
+
+.mic-circle.is-listening {
+  background: linear-gradient(180deg, #ff6b60 0%, #e03126 50%, #b8140a 100%);
+  color: #ffffff;
+  border-color: #ff8e86;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 0 40px rgba(255, 90, 78, 0.6), 0 12px 28px -8px rgba(255, 70, 60, 0.5);
+}
+
+.mic-shell::before,
+.mic-shell::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.mic-shell.listening::before {
+  border-color: rgba(255, 90, 78, 0.7);
+  animation: ring 1.8s ease-out infinite;
+}
+
+.mic-shell.listening::after {
+  border-color: rgba(255, 90, 78, 0.5);
+  animation: ring 1.8s ease-out 0.6s infinite;
+}
+
+@keyframes ring {
+  0% { transform: scale(0.85); opacity: 0.85; }
+  100% { transform: scale(1.65); opacity: 0; }
+}
+
+/* Sound Wave bars */
+.wave-bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5px;
+  height: 14px;
+}
+
+.wave-bars i {
+  width: 2.5px;
+  height: 35%;
+  border-radius: 1px;
+  background: currentColor;
+  transition: height 0.3s ease;
+}
+
+.wave-bars.active i {
+  animation: wv 0.9s ease-in-out infinite;
+}
+
+.wave-bars.active i:nth-child(2n) {
+  animation-delay: -0.3s;
+}
+
+.wave-bars.active i:nth-child(3n) {
+  animation-delay: -0.55s;
+}
+
+.wave-bars.active i:nth-child(5n) {
+  animation-delay: -0.15s;
+}
+
+@keyframes wv {
+  0%, 100% { height: 25%; }
+  50% { height: 100%; }
+}
+
+/* Entity Tag (.ent) */
+.entity-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(198, 198, 198, 0.35);
+  background: linear-gradient(105deg, #0a0a0a 0%, #202020 60%, #323232 100%);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #ffffff;
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.entity-pill:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+.entity-pill small {
+  font-family: var(--font-geist-mono), monospace;
+  font-weight: 400;
+  font-size: 9px;
+  color: #8f8f8f;
+}
+
+/* Chat Speech Bubbles */
+.bubble-user {
+  padding: 10px 14px;
+  border-radius: 16px;
+  border-bottom-right-radius: 4px;
+  background: linear-gradient(180deg, #ffffff 0%, #ededed 48%, #d4d4d4 100%);
+  color: #111111;
+  font-size: 13.5px;
+  line-height: 1.45;
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+}
+
+.bubble-agent {
+  padding: 11px 14px;
+  border-radius: 16px;
+  border-bottom-left-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0.5) 50%, rgba(160, 175, 200, 0.08));
+  color: #f1f1f1;
+  font-size: 13.5px;
+  line-height: 1.5;
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Serifs Accent */
+.editorial-em {
+  font-family: var(--font-instrument-serif), "Instrument Serif", "Times New Roman", serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.1em;
+  letter-spacing: -0.02em;
+  color: #9a9a9a;
 }

@@ -30,38 +30,52 @@ logger = logging.getLogger("vesper.agent")
 logging.basicConfig(level=logging.INFO)
 
 INSTRUCTIONS = """
-You are Vesper, a QA/QC assistant for a construction site manager. Speak in plain, natural
-ENGLISH, short and practical, like a knowledgeable colleague on a radio. Compose every
-sentence yourself — the tools give you STRUCTURED DATA, never a script to read.
+You are Vesper, the QA/QC assistant for the site manager of this project. You have been on
+this job the whole time and you remember it. Speak plain, natural ENGLISH — short, practical,
+like an experienced colleague on the radio. Compose every sentence yourself; tools give you
+STRUCTURED DATA, never a script to read out.
 
-HARD RULES:
+CONVERSATION STYLE:
+- You already know this site (see SITE MEMORY below). Refer to past work naturally:
+  "that's the same C-5 cage we released for pour on the eighth", "RFI fifty is still open".
+- Be a colleague continuing yesterday's conversation, not a form. One question at a time.
+- Keep replies under 3 sentences. Say numbers so they are easy to hear over noise
+  ("one eighty millimetres", "R F I zero four seven", "A one oh two revision four").
+- Never lecture. If nothing is wrong, say so briefly and move on.
+
+HARD RULES (safety — never bend these):
 - You may ONLY state drawing numbers, revisions, issue dates, RFI numbers, code clauses and
-  measurements that appear in a `check_observation` tool result. NEVER guess or recall a number.
+  measurements that come from SITE MEMORY or a tool result. NEVER invent or estimate a number.
 - When the manager describes a field observation, call `check_observation` with their words
   (verbatim, uncorrected).
-- If the result has `contradictions` or `blockers`: in your own words, say what is wrong,
+- If the result has `contradictions` or `blockers`: in your own words say what is wrong,
   naming the latest drawing + revision + its issue date + the RFI that drove the change +
-  the expected value and tolerance, all taken from the result. Then ask the manager what
-  they want to do — only the options in `allowed_decisions`.
-- If the result is clean (no contradictions/blockers/missing): read back what you understood
-  in one short line and ask "Want me to log it?".
+  the expected value and tolerance, all from the result. Then ask what they want to do —
+  only the options in `allowed_decisions`.
+- If the result is clean: read back what you understood in one line and ask if you should log it.
 - If `missing` is non-empty: ask only for those specific fields. Do not log.
 - Never say something is logged unless a tool result shows `logged`.
-- Act on the manager's choice by calling `log_observation` / `raise_rfi` / `raise_ncr` /
-  `stop_work` / `cancel`. If a tool returns `refused`, tell them the reason.
-- Keep replies under 3 sentences. Say numbers clearly ("one eighty millimetres",
-  "R F I zero four seven").
-- If the manager asks about something earlier, a past inspection, an RFI, a spec, or "what
-  did we log before", call `recall` and answer from what it returns.
+- Act on the manager's choice via `log_observation` / `raise_rfi` / `raise_ncr` /
+  `stop_work` / `cancel`. If a tool returns `refused`, tell them the reason plainly.
+- For anything historical not already in SITE MEMORY — an older inspection, a spec, a
+  submittal, a past RFI — call `recall` and answer from what it returns.
 
-Open with one short line: "Go ahead — what did you observe?"
+SITE MEMORY (current state of this project — this is real, use it):
+{site_brief}
 """
 
 
 class VesperAgent(Agent):
     def __init__(self) -> None:
-        super().__init__(instructions=INSTRUCTIONS)
-        self.brain = Brain()
+        brain = Brain()
+        try:
+            brief = brain.brief_text()
+        except Exception as e:  # never let memory failure kill the session
+            logger.warning("site brief unavailable: %s", e)
+            brief = "(site memory unavailable — use the recall tool for any history)"
+        super().__init__(instructions=INSTRUCTIONS.replace("{site_brief}", brief))
+        self.brain = brain
+        self.brief = brief
 
     async def _publish_state(self, ctx: RunContext, result: dict) -> None:
         """Push the structured engine result to the browser for the cards UI."""
@@ -185,6 +199,12 @@ async def entrypoint(ctx: JobContext) -> None:
     profiler = VoiceProfiler(agent.brain, on_update=_publish)
     profiler.attach(ctx.room)
 
+    # push the site memory to the browser so the manager sees what the agent is working from
+    try:
+        await _publish({"type": "brief", "brief": agent.brain.site_brief()})
+    except Exception:
+        pass
+
     session = AgentSession(
         stt=_stt(),
         llm=_llm(),
@@ -198,7 +218,13 @@ async def entrypoint(ctx: JobContext) -> None:
         room_input_options=RoomInputOptions(close_on_disconnect=False),
     )
     ctx.add_shutdown_callback(profiler.aclose)
-    await session.generate_reply(instructions="Greet the manager in one short English line.")
+    await session.generate_reply(instructions=(
+        "Greet the site manager in TWO short sentences, as a colleague picking up where you "
+        "left off. First sentence: name the most recent day's work from SITE MEMORY and the "
+        "single most pressing open item (a hold point, an unsatisfied permit check, or an "
+        "open RFI) — be specific, use the real IDs. Second sentence: ask what they are "
+        "looking at now. Do not list everything."
+    ))
 
 
 if __name__ == "__main__":

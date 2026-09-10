@@ -18,6 +18,8 @@ import config  # noqa: E402
 import db as dbmod  # noqa: E402
 from engine.dialogue import DialogueSession  # noqa: E402
 
+import memory  # noqa: E402
+
 
 def _fact(c) -> dict | None:
     f = getattr(c, "fact", None)
@@ -68,31 +70,18 @@ class Brain:
     def observe(self, utterance: str) -> dict:
         return _compact(self._dlg.handle(text=utterance or "", noise="none"))
 
+    def site_brief(self) -> dict:
+        """Structured situation report — what has already happened on this site."""
+        return memory.site_brief(self.repo)
+
+    def brief_text(self) -> str:
+        """Prose form of the brief, for the agent's system prompt."""
+        return memory.brief_text(self.site_brief())
+
     def recall(self, query: str, limit: int = 5) -> dict:
-        """Project memory: FTS over doc_chunks + this project's past field observations."""
-        q = (query or "").strip()
-        out: dict = {"query": q, "project_notes": [], "past_observations": []}
-        if not q:
-            return out
-        fts_q = " OR ".join(w for w in q.replace('"', " ").split() if len(w) > 2) or q
-        try:
-            rows = self.repo._all(
-                "SELECT doc_type, doc_ref, substr(content,1,240) AS snippet "
-                "FROM doc_chunks_fts WHERE doc_chunks_fts MATCH ? LIMIT ?", (fts_q, limit))
-            out["project_notes"] = rows
-        except Exception:
-            pass
-        try:
-            out["past_observations"] = self.repo._all(
-                "SELECT observation_id, created_at, location_id, element, attribute, value_claimed, "
-                "unit, drawing_id, final_decision, contradiction_kinds "
-                "FROM field_observations WHERE project_id = ? "
-                "AND (location_id LIKE ? OR attribute LIKE ? OR spoken_text LIKE ?) "
-                "ORDER BY created_at DESC LIMIT ?",
-                (self.repo.project_id, f"%{q}%", f"%{q}%", f"%{q}%", limit))
-        except Exception:
-            pass
-        return out
+        """Search real project history (observations, DPRs, RFIs, submittals, permits,
+        drawings) before the scraped template library."""
+        return memory.recall(self.repo, query, limit)
 
     def decide(self, decision: str) -> dict:
         """decision: log_observation | raise_rfi | raise_ncr | stop_work | cancel."""

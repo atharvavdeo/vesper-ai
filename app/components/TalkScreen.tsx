@@ -8,7 +8,7 @@ import {
   type Health,
   type TurnResponse,
 } from "@/lib/api";
-import { Card, Chip, ErrorBanner } from "@/components/ui";
+import { Card, Chip, ErrorBanner, Button, WaveVisualizer, VesperLogo } from "@/components/ui";
 
 const DECISION_LABELS: Record<DecisionKey, string> = {
   log_observation: "Log observation",
@@ -158,24 +158,56 @@ export default function TalkScreen({
 
   const sendTurn = useCallback(
     async (args: { text: string; audio?: Blob; bargeIn: boolean }) => {
-      if (!sessionId) {
-        setErr("No session — cannot send turn.");
-        return;
-      }
-      const text = args.text.trim();
-      if (!text) return;
+      if (!sessionId) return;
       setBusy(true);
       setErr(null);
       setDecisionResult(null);
+
+      let text = args.text.trim();
+      let audioBlob = args.audio;
+
+      // If we recorded audio, check if we need server STT.
+      // We transcribe via server whenever:
+      // 1. Web Speech produced no text (empty interim/final transcript), OR
+      // 2. Web Speech was completely unavailable (Linux Chromium, or error fallback).
+      if (audioBlob && (!text || sttViaServerRef.current)) {
+        try {
+          const stt = await api.stt(audioBlob, lang);
+          if (stt.text) {
+            text = stt.text;
+            setLiveTranscript(text);
+          }
+        } catch (e) {
+          // STT failure is non-fatal if we already had browser text
+          if (!text) {
+            setErr(`Transcription failed: ${(e as Error).message}`);
+            setBusy(false);
+            return;
+          }
+        }
+      }
+
+      if (!text && !audioBlob) {
+        setBusy(false);
+        return;
+      }
+
       try {
-        const r = args.audio
-          ? await api.turnMultipart({
-              sessionId,
-              text,
-              bargeIn: args.bargeIn,
-              audio: args.audio,
-            })
-          : await api.turnJson({ sessionId, text, bargeIn: args.bargeIn });
+        let r: TurnResponse;
+        if (audioBlob) {
+          r = await api.turnMultipart({
+            sessionId,
+            text,
+            audio: audioBlob,
+            bargeIn: args.bargeIn,
+          });
+        } else {
+          r = await api.turnJson({
+            sessionId,
+            text,
+            bargeIn: args.bargeIn,
+          });
+        }
         setResp(r);
         const speech = r.reply?.speech || r.reply?.text || "";
         void playTts(speech);
@@ -186,10 +218,9 @@ export default function TalkScreen({
         bargeInRef.current = false;
       }
     },
-    [sessionId, playTts],
+    [sessionId, lang, playTts],
   );
 
-  // ---- Mic capture (SpeechRecognition + MediaRecorder in parallel) ----
   const stopMic = useCallback(() => {
     setListening(false);
     try {
@@ -201,51 +232,36 @@ export default function TalkScreen({
       mediaRecorderRef.current &&
       mediaRecorderRef.current.state !== "inactive"
     ) {
-      mediaRecorderRef.current.stop(); // triggers onstop -> send
+      mediaRecorderRef.current.stop();
     }
   }, []);
 
   const startMic = useCallback(async () => {
     setErr(null);
-    const SR = getSR(); // optional — MediaRecorder + server STT works without it
-    finalTranscriptRef.current = "";
-    bargeInRef.current = false;
     setLiveTranscript("");
+    finalTranscriptRef.current = "";
+    chunksRef.current = [];
+    maybeBargeIn();
 
-    // Audio stream + recorder
+    const SR = getSR();
+
+    // Always start MediaRecorder so we capture raw audio for:
+    // 1. VoiceID speaker verification (mandatory on every voice turn).
+    // 2. Server STT fallback (whenever browser STT produces nothing or fails).
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      chunksRef.current = [];
       const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
       mediaRecorderRef.current = mr;
       mr.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
-      mr.onstop = async () => {
+      mr.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
-        let text = (finalTranscriptRef.current || liveTranscript).trim();
-        // No usable browser transcript -> transcribe the recording server-side (Groq Whisper).
-        if (!text && blob.size > 0 && (sttViaServerRef.current || !srSupported)) {
-          setBusy(true);
-          try {
-            const out = await api.stt(blob, lang.startsWith("hi") ? "hi" : "en");
-            text = (out.text || "").trim();
-            if (text) setLiveTranscript(text);
-          } catch (e) {
-            setErr(`Transcription failed: ${(e as Error).message}`);
-          } finally {
-            setBusy(false);
-          }
-        }
-        if (!text) {
-          setErr("Nothing heard — try again or use the text box.");
-          return;
-        }
         void sendTurn({
-          text,
+          text: finalTranscriptRef.current || liveTranscript,
           audio: blob.size > 0 ? blob : undefined,
           bargeIn: bargeInRef.current,
         });
@@ -285,8 +301,6 @@ export default function TalkScreen({
       setLiveTranscript((final + " " + interim).trim());
     };
     rec.onerror = (ev) => {
-      // 'network' / 'service-not-allowed' -> the browser STT backend is unreachable
-      // (common on Linux Chromium). Fall back to server STT silently for this + future turns.
       if (
         ev.error === "network" ||
         ev.error === "service-not-allowed" ||
@@ -300,9 +314,6 @@ export default function TalkScreen({
       }
     };
     rec.onend = () => {
-      // webkitSpeechRecognition self-stops after a short silence (or instantly on a
-      // Linux 'network' error). We do NOT end the turn here — the user taps to send.
-      // Keep the recognizer alive while the recorder is still running.
       if (mediaRecorderRef.current?.state === "recording") {
         try {
           rec.start();
@@ -317,7 +328,7 @@ export default function TalkScreen({
     } catch (e) {
       setErr(`Could not start recognition: ${(e as Error).message}`);
     }
-  }, [lang, liveTranscript, maybeBargeIn, sendTurn, stopMic, srSupported]);
+  }, [lang, liveTranscript, maybeBargeIn, sendTurn, stopMic]);
 
   useEffect(() => {
     return () => {
@@ -332,6 +343,7 @@ export default function TalkScreen({
   }, []);
 
   const submitTyped = () => {
+    if (!typed.trim()) return;
     maybeBargeIn();
     void sendTurn({ text: typed, bargeIn: bargeInRef.current });
     setTyped("");
@@ -360,89 +372,131 @@ export default function TalkScreen({
   const speakerLocked = resp?.speaker && resp.speaker.match === false;
 
   return (
-    <div className="flex flex-col gap-4 p-4 pb-28">
-      <header className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Talk</h1>
-        <div className="flex items-center gap-2 text-xs">
+    <div className="flex flex-col gap-4">
+      {/* Language & Health Header */}
+      <div className="flex items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-1.5 p-0.5 rounded-lg border border-white/10 bg-black/40">
+          {(["en-IN", "hi-IN"] as const).map((l) => {
+            const active = lang === l;
+            return (
+              <button
+                key={l}
+                onClick={() => setLang(l)}
+                className={`px-2.5 py-1 text-xs rounded-md transition-all font-medium ${
+                  active
+                    ? "bg-white text-black shadow-sm font-semibold"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                {l === "en-IN" ? "English" : "Hinglish"}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-mono">
           {health ? (
-            <span className="text-zinc-400">
-              llm:{health.llm} {health.rime ? "· rime" : ""}{" "}
-              {health.voiceid ? "· voiceid" : ""}
+            <span className="truncate max-w-[170px] opacity-80">
+              {health.llm} {health.rime ? "· RIME" : ""}{" "}
+              {health.voiceid ? "· VOICEID" : ""}
             </span>
           ) : null}
           {ttsMissing ? (
-            <span className="rounded bg-amber-800 px-2 py-0.5 text-amber-100">
-              Rime key missing
+            <span className="rounded bg-amber-950 border border-amber-600/50 px-1.5 py-0.5 text-amber-200 text-[10px]">
+              No Rime key
             </span>
           ) : null}
         </div>
-      </header>
+      </div>
 
       <ErrorBanner msg={sessionError} />
       {!sessionId && !sessionError ? (
-        <div className="text-xs text-zinc-400">Starting session…</div>
+        <div className="glass-panel p-3 text-center text-xs text-zinc-400 flex items-center justify-center gap-2">
+          <svg className="animate-spin h-3.5 w-3.5 text-zinc-300" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+          <span>Establishing session memory…</span>
+        </div>
       ) : null}
 
-      {/* language toggle */}
-      <div className="flex gap-2">
-        {(["en-IN", "hi-IN"] as const).map((l) => (
+      {/* Push-to-Talk Mic hero */}
+      <div className="glass-panel py-6 px-4 flex flex-col items-center justify-center text-center">
+        <div className="mb-4">
+          <p className="text-xs uppercase tracking-wider text-zinc-400 font-medium font-mono">
+            Operational Voice Memory
+          </p>
+          <h2 className="text-lg font-medium text-white tracking-tight mt-0.5">
+            Tap and speak your <span className="editorial-em">site observation</span>
+          </h2>
+        </div>
+
+        {/* Concentric Radar Ring Mic Button */}
+        <div className={`mic-shell ${listening ? "listening" : ""}`}>
           <button
-            key={l}
-            onClick={() => setLang(l)}
-            className={`rounded-full border px-3 py-1 text-sm ${
-              lang === l
-                ? "border-zinc-100 bg-zinc-100 text-black"
-                : "border-zinc-600 text-zinc-300"
-            }`}
+            type="button"
+            onClick={() => {
+              if (busy) return;
+              if (listening) stopMic();
+              else void startMic();
+            }}
+            disabled={!sessionId || busy || (mounted && !micSupported)}
+            aria-label={listening ? "Stop recording" : "Push to talk"}
+            className={`mic-circle ${listening ? "is-listening" : ""}`}
           >
-            {l}
+            {listening ? (
+              <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="3" />
+              </svg>
+            ) : (
+              <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" x2="12" y1="19" y2="22" />
+              </svg>
+            )}
           </button>
-        ))}
-        {speaking ? (
-          <span className="self-center text-xs text-emerald-400">
-            agent speaking…
-          </span>
-        ) : null}
+        </div>
+
+        <div className="mt-4 flex flex-col items-center gap-1.5 min-h-[44px]">
+          {speaking ? (
+            <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium">
+              <WaveVisualizer active={true} />
+              <span>Vesper is speaking…</span>
+            </div>
+          ) : listening ? (
+            <span className="text-xs font-medium text-red-400 animate-pulse">
+              Listening… tap button to finish
+            </span>
+          ) : busy ? (
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <svg className="animate-spin h-3.5 w-3.5 text-zinc-300" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              <span>Verifying drawings & specs…</span>
+            </div>
+          ) : (
+            <span className="text-xs text-zinc-400">
+              Tap mic or type observation below
+            </span>
+          )}
+
+          {voiceEnrolled === false ? (
+            <p className="text-[11px] text-zinc-500">
+              Voice not enrolled —{" "}
+              <button
+                onClick={onGoToEnroll}
+                className="underline underline-offset-2 text-zinc-300 hover:text-white"
+              >
+                enroll voice
+              </button>
+            </p>
+          ) : null}
+        </div>
       </div>
 
-      {/* push to talk */}
-      <button
-        onClick={() => {
-          if (busy) return;
-          if (listening) stopMic();
-          else void startMic();
-        }}
-        disabled={!sessionId || busy || (mounted && !micSupported)}
-        className={`mx-auto flex h-40 w-40 select-none items-center justify-center rounded-full border-4 text-center text-base font-semibold transition ${
-          listening
-            ? "border-red-400 bg-red-600 text-white"
-            : "border-zinc-600 bg-zinc-800 text-zinc-100"
-        } disabled:opacity-40`}
-      >
-        {listening ? "Listening…\ntap to send" : "Tap to talk"}
-      </button>
-      {mounted && !micSupported ? (
-        <p className="text-center text-xs text-amber-400">
-          Microphone/recording unavailable — use the text box below.
-        </p>
-      ) : mounted && !srSupported ? (
-        <p className="text-center text-xs text-zinc-500">
-          Using server transcription (browser speech API unavailable).
-        </p>
-      ) : null}
-      {voiceEnrolled === false ? (
-        <p className="text-center text-xs text-zinc-500">
-          Voice not enrolled —{" "}
-          <button
-            onClick={onGoToEnroll}
-            className="underline underline-offset-2"
-          >
-            go to Enroll tab
-          </button>
-        </p>
-      ) : null}
-
-      {/* typed fallback — always visible */}
+      {/* Typed Input Fallback */}
       <div className="flex gap-2">
         <input
           value={typed}
@@ -450,111 +504,147 @@ export default function TalkScreen({
           onKeyDown={(e) => {
             if (e.key === "Enter") submitTyped();
           }}
-          placeholder="Type an observation and press Enter"
-          className="flex-1 rounded-lg border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm outline-none focus:border-zinc-300"
+          placeholder="Or type: 'Column C-5 pe rebar spacing 180mm'..."
+          className="flex-1 rounded-lg border border-white/15 bg-black/60 px-3.5 py-2 text-xs outline-none text-white placeholder:text-zinc-500 focus:border-white/40 focus:ring-1 focus:ring-white/20 transition-all backdrop-blur-md"
         />
-        <button
+        <Button
+          variant="solid"
+          size="sm"
           onClick={submitTyped}
           disabled={!sessionId || busy || !typed.trim()}
-          className="rounded-lg border border-zinc-500 px-3 py-2 text-sm disabled:opacity-40"
         >
           Send
-        </button>
+        </Button>
       </div>
 
-      {busy ? <div className="text-xs text-zinc-400">Working…</div> : null}
       <ErrorBanner msg={err} />
 
-      {/* live transcript */}
+      {/* Live Transcript Bubble */}
       {liveTranscript ? (
-        <Card title="Transcript">
-          <p className="whitespace-pre-wrap">{liveTranscript}</p>
-        </Card>
-      ) : null}
-
-      {/* speaker gate */}
-      {speakerLocked ? (
-        <Card tone="red">
-          🔒 Speaker not verified — logging locked
-          {resp?.speaker ? (
-            <span className="ml-1 opacity-70">
-              (score {resp.speaker.score.toFixed(2)})
-            </span>
-          ) : null}
-        </Card>
-      ) : null}
-
-      {/* entity chips */}
-      {entities.length ? (
-        <div className="flex flex-wrap gap-2">
-          {entities.map((en, i) => (
-            <Chip
-              key={`${en.label}-${i}`}
-              label={en.label}
-              dim={en.confidence < 0.7}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      {/* contradictions */}
-      {contradictions.length ? (
-        <Card tone="red" title="Contradictions">
-          <ul className="list-disc pl-5">
-            {contradictions.map((c, i) => (
-              <li key={i}>{c.detail}</li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
-
-      {/* blockers */}
-      {blockers.length ? (
-        <Card tone="amber" title="Blockers">
-          <ul className="list-disc pl-5">
-            {blockers.map((b, i) => (
-              <li key={i}>{b.detail}</li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
-
-      {/* agent reply */}
-      {resp?.reply?.text ? (
-        <div className="rounded-2xl rounded-tl-sm border border-zinc-700 bg-zinc-800 p-3 text-sm">
-          {resp.reply.text}
-          <div className="mt-1 text-[10px] uppercase tracking-wide text-zinc-500">
-            state: {resp.state}
+        <div className="flex flex-col items-end gap-1.5 self-end max-w-[90%]">
+          <div className="flex items-center gap-1 text-[10.5px] text-zinc-500 font-mono pr-1">
+            <span>You</span>
+          </div>
+          <div className="bubble-user">
+            {liveTranscript}
           </div>
         </div>
       ) : null}
 
-      {/* decision buttons */}
-      {allowed.length ? (
-        <div className="flex flex-wrap gap-2">
-          {allowed.map((d) => (
-            <button
-              key={d}
-              onClick={() => onDecision(d)}
-              disabled={busy}
-              className="rounded-lg border border-zinc-400 px-3 py-2 text-sm font-medium disabled:opacity-40"
-            >
-              {DECISION_LABELS[d]}
-            </button>
-          ))}
+      {/* Speaker Verification Lock */}
+      {speakerLocked ? (
+        <Card tone="red">
+          <div className="flex items-center gap-2 font-medium text-red-200">
+            <svg className="w-4 h-4 shrink-0 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+            <span>Speaker not verified — logging locked</span>
+            {resp?.speaker ? (
+              <span className="ml-auto font-mono text-[11px] opacity-70">
+                score {resp.speaker.score.toFixed(2)}
+              </span>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
+
+      {/* Extracted Entity Badges */}
+      {entities.length ? (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[10px] font-mono tracking-wider uppercase text-zinc-500 px-1">
+            Extracted Context
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {entities.map((en, i) => (
+              <Chip
+                key={`${en.label}-${i}`}
+                label={en.label}
+                dim={en.confidence < 0.7}
+                sub={en.confidence < 0.7 ? "low conf" : undefined}
+              />
+            ))}
+          </div>
         </div>
       ) : null}
 
-      {/* decision result */}
+      {/* Contradiction Alerts */}
+      {contradictions.length ? (
+        <Card tone="red" title="Drawing / BOQ Contradiction">
+          <ul className="space-y-1.5 text-xs text-red-100">
+            {contradictions.map((c, i) => (
+              <li key={i} className="flex items-start gap-2 leading-relaxed">
+                <span className="text-red-400 mt-0.5">•</span>
+                <span>{c.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {/* Blocker Alerts */}
+      {blockers.length ? (
+        <Card tone="amber" title="Work Blocker Detected">
+          <ul className="space-y-1.5 text-xs text-amber-100">
+            {blockers.map((b, i) => (
+              <li key={i} className="flex items-start gap-2 leading-relaxed">
+                <span className="text-amber-400 mt-0.5">•</span>
+                <span>{b.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {/* Agent Reply Bubble */}
+      {resp?.reply?.text ? (
+        <div className="flex flex-col items-start gap-1.5 self-start max-w-[92%]">
+          <div className="flex items-center gap-1.5 text-[10.5px] text-zinc-400 font-mono pl-1">
+            <VesperLogo showWordmark={false} size={14} />
+            <span>Vesper</span>
+            <span className="text-zinc-600">·</span>
+            <span className="text-zinc-500 uppercase text-[9px]">{resp.state}</span>
+          </div>
+          <div className="bubble-agent">
+            {resp.reply.text}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Decision Action Buttons */}
+      {allowed.length ? (
+        <div className="glass-panel p-3 flex flex-col gap-2">
+          <span className="text-[10px] font-mono tracking-wider uppercase text-zinc-400">
+            Recommended Action
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {allowed.map((d) => (
+              <Button
+                key={d}
+                variant={d === "log_observation" ? "solid" : "ghost"}
+                size="sm"
+                onClick={() => onDecision(d)}
+                disabled={busy}
+              >
+                {DECISION_LABELS[d]}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Confirmation Card */}
       {decisionResult ? (
-        <Card tone="green" title="Decision result">
-          <p>{decisionResult.reply?.text}</p>
-          <p className="mt-1 text-xs text-zinc-300">
-            state: {decisionResult.state}
-            {decisionResult.logged
-              ? ` · ${JSON.stringify(decisionResult.logged)}`
-              : ""}
-          </p>
+        <Card tone="green" title="Action Confirmed">
+          <div className="text-xs text-emerald-100 leading-relaxed">
+            <p className="font-medium">{decisionResult.reply?.text}</p>
+            <p className="mt-1 font-mono text-[10.5px] text-emerald-300/80">
+              State: {decisionResult.state}
+              {decisionResult.logged
+                ? ` · Logged: ${JSON.stringify(decisionResult.logged)}`
+                : ""}
+            </p>
+          </div>
         </Card>
       ) : null}
     </div>

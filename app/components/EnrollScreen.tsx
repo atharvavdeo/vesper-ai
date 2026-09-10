@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import { Card, ErrorBanner } from "@/components/ui";
+import { Card, ErrorBanner, Button, WaveVisualizer } from "@/components/ui";
 
 type VoiceStatus = {
   enabled: boolean;
@@ -13,9 +13,9 @@ type VoiceStatus = {
 
 const TAKE_SECONDS = 6;
 const PROMPTS = [
-  "Say: “Column C-5 pe rebar spacing check kiya, drawing A-102 revision R4.”",
-  "Say: “Beam B-12 ka concrete cover theek hai, drawing S-201 revision R2.”",
-  "Say: “Slab level 3 pe crack dekha, drawing A-305 revision R1.”",
+  "“Column C-5 pe rebar spacing check kiya, drawing A-102 revision R4.”",
+  "“Beam B-12 ka concrete cover theek hai, drawing S-201 revision R2.”",
+  "“Slab level 3 pe crack dekha, drawing A-305 revision R1.”",
 ];
 
 export default function EnrollScreen({
@@ -140,99 +140,152 @@ export default function EnrollScreen({
   };
 
   return (
-    <div className="flex flex-col gap-3 p-4 pb-28">
-      <header className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Enroll</h1>
-        <button
-          onClick={loadStatus}
-          className="rounded border border-zinc-600 px-2 py-1 text-xs"
-        >
+    <div className="flex flex-col gap-4">
+      {/* Header section */}
+      <div className="flex items-center justify-between px-1">
+        <div>
+          <span className="text-[10px] font-mono tracking-wider uppercase text-zinc-400">
+            Biometric VoiceID Gate
+          </span>
+          <h2 className="text-lg font-medium text-white tracking-tight">
+            Speaker <span className="editorial-em">Enrollment</span>
+          </h2>
+        </div>
+        <Button variant="ghost" size="sm" onClick={loadStatus}>
           Refresh
-        </button>
-      </header>
+        </Button>
+      </div>
 
       <ErrorBanner msg={statusErr} />
 
+      {/* VoiceID status badge card */}
       {status ? (
-        <Card title="Voice ID status">
-          <div className="flex flex-wrap gap-x-4 gap-y-1">
-            <span>enabled: {String(status.enabled)}</span>
-            <span>reachable: {String(status.reachable)}</span>
-            <span
-              className={
-                status.enrolled ? "text-emerald-400" : "text-amber-400"
-              }
-            >
-              enrolled: {String(status.enrolled)}
-            </span>
-            <span>threshold: {status.threshold}</span>
+        <Card title="Telemetry · Voice Verification Engine">
+          <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-500">Service:</span>
+              <span className={status.reachable ? "text-emerald-400" : "text-red-400"}>
+                {status.reachable ? "ONLINE" : "UNREACHABLE"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-500">Status:</span>
+              <span className={status.enrolled ? "text-emerald-400 font-semibold" : "text-amber-400"}>
+                {status.enrolled ? "ENROLLED" : "PENDING"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-500">Threshold:</span>
+              <span className="text-zinc-200">{status.threshold}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-500">Enforcement:</span>
+              <span className={status.enabled ? "text-zinc-200" : "text-zinc-500"}>
+                {status.enabled ? "ACTIVE" : "BYPASSED"}
+              </span>
+            </div>
           </div>
         </Card>
       ) : null}
 
-      <p className="text-sm text-zinc-300">
-        Record 3 short voice samples (~{TAKE_SECONDS}s each). Re-take any that
-        sound off, then enroll.
+      <p className="text-xs text-zinc-400 px-1 leading-relaxed">
+        Record 3 canonical Hindi / Hinglish phrases (~{TAKE_SECONDS}s each) to train the site manager voice model.
       </p>
 
-      {[0, 1, 2].map((idx) => {
-        const isRec = recordingIdx === idx;
-        const captured = clips[idx] != null;
-        return (
-          <Card key={idx} tone={captured ? "green" : "neutral"}>
-            <div className="mb-2 text-xs text-zinc-400">Take {idx + 1}</div>
-            <p className="mb-2 text-sm">{PROMPTS[idx]}</p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => (isRec ? stopTake() : startTake(idx))}
-                disabled={recordingIdx != null && !isRec}
-                className={`rounded-lg border px-3 py-2 text-sm disabled:opacity-40 ${
-                  isRec
-                    ? "border-red-400 bg-red-600 text-white"
-                    : "border-zinc-500"
-                }`}
-              >
-                {isRec
-                  ? `Stop (${countdown}s)`
-                  : captured
-                    ? "Re-take"
-                    : "Record"}
-              </button>
-              {captured && !isRec ? (
-                <span className="text-xs text-emerald-400">clip captured</span>
-              ) : null}
-            </div>
-          </Card>
-        );
-      })}
+      {/* 3 Voice Take Cards */}
+      <div className="space-y-2.5">
+        {[0, 1, 2].map((idx) => {
+          const isRec = recordingIdx === idx;
+          const captured = clips[idx] != null;
+          return (
+            <Card
+              key={idx}
+              tone={captured ? "green" : isRec ? "red" : "neutral"}
+              title={`Sample Take 0${idx + 1}`}
+            >
+              <p className="text-xs text-zinc-200 mb-3 leading-relaxed font-sans italic">
+                {PROMPTS[idx]}
+              </p>
+              <div className="flex items-center justify-between">
+                <Button
+                  variant={isRec ? "ghost" : captured ? "ghost" : "solid"}
+                  size="sm"
+                  onClick={() => (isRec ? stopTake() : startTake(idx))}
+                  disabled={recordingIdx != null && !isRec}
+                  className={isRec ? "border-red-500 text-red-200 bg-red-950/60" : ""}
+                >
+                  {isRec ? (
+                    <span className="flex items-center gap-1.5 text-red-300">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                      Stop ({countdown}s)
+                    </span>
+                  ) : captured ? (
+                    "Re-record"
+                  ) : (
+                    "Record Phrase"
+                  )}
+                </Button>
 
-      <button
+                {isRec ? (
+                  <div className="flex items-center gap-2 text-red-400 text-xs">
+                    <WaveVisualizer active={true} />
+                    <span className="font-mono text-[11px]">{countdown}s</span>
+                  </div>
+                ) : captured ? (
+                  <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-mono">
+                    <svg className="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    Captured
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-zinc-500 font-mono">Ready</span>
+                )}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Enroll Action Button */}
+      <Button
+        variant="solid"
+        size="lg"
         onClick={enroll}
         disabled={capturedCount < 3 || enrolling}
-        className="rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-sm font-semibold text-black disabled:opacity-40"
+        className="w-full mt-1"
       >
         {enrolling
-          ? "Enrolling…"
-          : `Enroll (${capturedCount}/3 clips)`}
-      </button>
+          ? "Computing Voice Embeddings…"
+          : `Enroll Voice Profile (${capturedCount}/3 samples)`}
+      </Button>
 
       <ErrorBanner msg={enrollErr} />
 
+      {/* Result feedback */}
       {result ? (
-        <Card tone={done ? "green" : "neutral"} title="Enroll result">
-          <div>samples: {result.samples}</div>
-          <div>cohesion: {result.cohesion}</div>
-          {done ? (
-            <div className="mt-1 font-semibold text-emerald-400">
-              {"✅"} enrolled
+        <Card tone={done ? "green" : "neutral"} title="Embedding Cohesion Result">
+          <div className="space-y-1.5 text-xs">
+            <div className="flex justify-between font-mono">
+              <span className="text-zinc-400">Audio Samples:</span>
+              <span className="text-white">{result.samples}</span>
             </div>
-          ) : null}
+            <div className="flex justify-between font-mono">
+              <span className="text-zinc-400">Cohesion Score:</span>
+              <span className="text-emerald-400 font-semibold">{result.cohesion.toFixed(4)}</span>
+            </div>
+            {done ? (
+              <div className="mt-2 pt-2 border-t border-emerald-500/30 flex items-center gap-2 text-emerald-300 font-medium">
+                <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                  <polyline points="22 4 12 14.01 9 11.01" />
+                </svg>
+                <span>Voice Profile Verified & Activated</span>
+              </div>
+            ) : null}
+          </div>
         </Card>
       ) : null}
-
-      <p className="text-xs text-zinc-500">
-        Match threshold is <code>SPEAKER_ID_THRESHOLD</code> in the server .env.
-      </p>
     </div>
   );
 }
