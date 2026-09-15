@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Build Vesper's memory index: global knowledge + the P1 project record.
+"""Build Vesper's memory index: global knowledge + project site records.
 
     backend/.venv/bin/python scripts/ingest_knowledge.py                 # everything present
-    backend/.venv/bin/python scripts/ingest_knowledge.py --only templates,p1
+    backend/.venv/bin/python scripts/ingest_knowledge.py --only projects --project P1,NSK
     backend/.venv/bin/python scripts/ingest_knowledge.py --sections code,prices --no-cognee
 
 Resumable: every document is keyed by sha256(content + chunking version) per dataset, so a rerun skips what
@@ -10,8 +10,8 @@ is already indexed. Progress -> data/memory/ingest_log.txt; timings -> data/memo
 
 Sources
   data/site.db   templates + template_fields (kb_templates), code_clause chunks (kb_is_codes),
-                 P1 record: drawings+facts, RFIs, permits+checks, checklists+items, DPRs, BOQ, submittals,
-                 observations  -> dataset org_local_demo__proj_P1
+                 project record: drawings+facts, RFIs, permits+checks, checklists+items, DPRs, BOQ,
+                 submittals, observations -> one org/project dataset
   data/raw/sections/<section>/*.json (W6 crawler)
                  code, irc -> kb_is_codes · prices, steel, sor, rate-analysis, dcr -> kb_prices_sor
                  thumbrules, handbook, knowledge, term, cpheeo, gate -> kb_handbook
@@ -139,10 +139,10 @@ def ingest_templates() -> None:
     b.done()
 
 
-# ============================================================== site.db: P1 record
-def ingest_p1() -> None:
+# ============================================================== site.db: project record
+def ingest_project(project_id: str, org_id: str | None = None) -> None:
     c = site()
-    org, pid = config.DEMO_ORG, config.DEMO_PROJECT
+    org, pid = org_id or config.DEMO_ORG, project_id.strip().upper()
     ds = config.project_dataset(org, pid)
     rows = lambda sql, a=(): [dict(r) for r in c.execute(sql, a)]  # noqa: E731
     specs: list[DocSpec] = []
@@ -151,7 +151,10 @@ def ingest_p1() -> None:
         return DocSpec(dataset=ds, title=title, chunks=chunks, content_hash=h(content), org_id=org, project_id=pid,
                        category=category, source=source, source_key=key, graph=True)
 
-    p = rows("SELECT * FROM projects WHERE project_id = ?", (pid,))[0]
+    projects = rows("SELECT * FROM projects WHERE project_id = ?", (pid,))
+    if not projects:
+        raise ValueError(f"project {pid!r} is not present in site.db")
+    p = projects[0]
     locs = rows("SELECT location_id, grid, level, zone FROM locations WHERE project_id = ? ORDER BY location_id", (pid,))
     dwgs = rows("SELECT drawing_number, revision, title, discipline, issued_on FROM v_latest_drawings "
                 "WHERE project_id = ? ORDER BY drawing_number", (pid,))
@@ -168,7 +171,8 @@ def ingest_p1() -> None:
     cat = {"drawing": "drawing", "rfi": "rfi", "boq": "boq", "submittal": "submittal"}
     grouped: dict[tuple, list[dict]] = {}
     for r in rows("SELECT doc_type, doc_ref, drawing_number, revision, content FROM doc_chunks "
-                  "WHERE doc_type IN ('drawing','rfi','boq','submittal') ORDER BY chunk_id"):
+                  "WHERE project_id = ? AND doc_type IN ('drawing','rfi','boq','submittal') ORDER BY chunk_id",
+                  (pid,)):
         grouped.setdefault((r["doc_type"], r["doc_ref"]), []).append(r)
     for (dt, ref), items in grouped.items():
         content = "\n".join(i["content"] for i in items)
@@ -218,24 +222,29 @@ def ingest_p1() -> None:
                                                                         citation=f"per observation {o['observation_id']}")],
                           f"obs:{o['observation_id']}", "observation", txt))
 
-    b = Batcher("p1_record", len(specs))
+    b = Batcher(f"project_{pid.lower()}_record", len(specs))
     for s in specs:
         b.add(s)
     b.done()
 
-    # IS code clause notes curated in site.db (P1 tolerances) -> P1 project dataset
-    cl = rows("SELECT doc_ref, content FROM doc_chunks WHERE doc_type = 'code_clause'")
-    b = Batcher("site_code_clauses", len(cl))
+    # Site-specific code notes belong only to the project that owns the chunk.
+    cl = rows("SELECT doc_ref, content FROM doc_chunks WHERE doc_type = 'code_clause' AND project_id = ?", (pid,))
+    b = Batcher(f"project_{pid.lower()}_code_clauses", len(cl))
     for r in cl:
         m = re.match(r"(IS \d+)\s+Cl\.\s*([\d.]+\w*(?:\([a-z]\))?)", r["doc_ref"])
         code, clause = (m.group(1), m.group(2)) if m else (r["doc_ref"], "")
-        # these clause notes carry P1 site tolerances ("used on P1"), so they are PROJECT data, never global
+        # These notes may carry site-specific tolerances, so they are project data, never global.
         b.add(DocSpec(dataset=ds, title=r["doc_ref"], content_hash=h(r["content"]), category="is_code",
                       org_id=org, project_id=pid,
                       source="site.db:code_clause", source_key=f"site:{r['doc_ref']}", graph=True,
                       chunks=[Chunk(text=r["content"], section=r["doc_ref"], kind="clause",
                                     citation=f"per {code} clause {clause}", meta={"code": code, "clause": clause})]))
     b.done()
+
+
+def ingest_p1() -> None:
+    """Backward-compatible entrypoint retained for existing scripts/tests."""
+    ingest_project(config.DEMO_PROJECT, config.DEMO_ORG)
 
 
 # ============================================================== crawled sections
@@ -442,24 +451,29 @@ def ingest_sections(only: list[str] | None) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--only", default="templates,p1,sections")
+    ap.add_argument("--only", default="templates,projects,sections")
+    ap.add_argument("--project", default=config.DEMO_PROJECT,
+                    help="comma-separated site-record project IDs (default: demo project)")
     ap.add_argument("--sections", default="")
     ap.add_argument("--no-cognee", action="store_true")
     ap.add_argument("--no-index", action="store_true")
     ap.add_argument("--cognify-max", type=int, default=config.COGNEE_MAX_DOCS_PER_RUN)
     a = ap.parse_args()
     only = [x.strip() for x in a.only.split(",") if x.strip()]
+    projects = list(dict.fromkeys(x.strip().upper() for x in a.project.split(",") if x.strip()))
     secs = [x.strip() for x in a.sections.split(",") if x.strip()] or None
     t0 = time.time()
-    log(f"=== ingest_knowledge start only={only} sections={secs or 'all'}")
+    log(f"=== ingest_knowledge start only={only} projects={projects} sections={secs or 'all'}")
     from memory import embed
     if not embed.health().get("ok"):
         log("ollama/bge-m3 not reachable — aborting")
         sys.exit(2)
     if "templates" in only:
         ingest_templates()
-    if "p1" in only:
-        ingest_p1()
+    if "projects" in only or "p1" in only:
+        selected = [config.DEMO_PROJECT] if "p1" in only and "projects" not in only else projects
+        for project_id in selected:
+            ingest_project(project_id)
     if "sections" in only:
         ingest_sections(secs)
     if not a.no_index:
