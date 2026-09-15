@@ -19,11 +19,12 @@ python3 - "$OUT" <<'PY'
 import pathlib, re, sys
 out = pathlib.Path(sys.argv[1])
 landing = (out / "landing" / "index.html").read_text()
-# On the public link every "Launch App" opens the demo console instead of the signed-in app.
-landing = landing.replace('href="/app"', 'href="/demo/"')
+# On the public link every "Launch App" opens the key-free laptop dashboard (recorded data + tour);
+# the phone console replay stays at /demo/.
+landing = landing.replace('href="/app"', 'href="/app/"')
 (out / "index.html").write_text(landing)
 (out / "landing" / "index.html").write_text(landing)
-(out / "_redirects").write_text("/app /demo/ 302\n/app/* /demo/ 302\n/sign-in* /demo/ 302\n/sign-up* /demo/ 302\n/demo /demo/ 301\n")
+(out / "_redirects").write_text("/app /app/ 301\n/onboarding /onboarding/ 301\n/sign-in* /app/ 302\n/sign-up* /app/ 302\n/demo /demo/ 301\n")
 for junk in ("uploads",):
     p = out / junk
     if p.is_dir() and not any(p.iterdir()):
@@ -31,7 +32,7 @@ for junk in ("uploads",):
 PY
 
 # Fail the build if anything secret-shaped slipped into the static output.
-if grep -rqE "pk_(test|live)_|sk_(test|live)_|csk-[a-z0-9]{10}|gsk_[A-Za-z0-9]{10}|nvapi-|RIME_API_KEY" "$OUT"; then
+if grep -rqE "pk_(test|live)_|sk_(test|live)_|sk_[a-z0-9]{8}_[A-Za-z0-9]{20,}|re_[A-Za-z0-9]{8}_[A-Za-z0-9]{20,}|csk-[a-z0-9]{10}|gsk_[A-Za-z0-9]{10}|nvapi-|RIME_API_KEY|SARVAM_API_KEY|RESEND_API_KEY" "$OUT"; then
   echo "refusing to ship: secret-like string found in $OUT" >&2
   exit 1
 fi
