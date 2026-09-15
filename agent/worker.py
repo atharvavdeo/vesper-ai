@@ -327,7 +327,9 @@ async def entrypoint(ctx: JobContext) -> None:
     except ValueError:
         meta = {}
     user_id = meta.get("user_id") or participant.identity.split("#")[0] or "Site Manager (voice)"
-    brain = Brain(user_id=user_id, language="en-IN")
+    language = str(meta.get("language") or "en-IN")
+    project_id = str(meta.get("projectId") or os.getenv("PROJECT_ID", "P1"))
+    brain = Brain(user_id=user_id, language=language, project_id=project_id)
     agent = VesperAgent(brain, ctx.room)
     agent._last = {}
 

@@ -54,8 +54,9 @@ class Brain:
     """One per LiveKit room. Holds the DialogueSession so slots accumulate across turns, and
     records the session under the signed-in user so it appears in their history."""
 
-    def __init__(self, user_id: str = "Site Manager (voice)", language: str = "en-IN") -> None:
-        self.repo = dbmod.Repo(dbmod.connect(), config.PROJECT_ID)
+    def __init__(self, user_id: str = "Site Manager (voice)", language: str = "en-IN",
+                 project_id: str | None = None) -> None:
+        self.repo = dbmod.Repo(dbmod.connect(), project_id or config.PROJECT_ID)
         self.user_id = user_id
         self.language = language
         self.session_id = dbmod.create_session(self.repo, user_id, lang=language)
