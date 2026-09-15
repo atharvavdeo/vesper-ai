@@ -42,7 +42,7 @@ type Row = { who: "You" | "Vesper"; text: string; ts: number; id: string };
 type LogLine = { ts: number; level: "info" | "state" | "warn" | "error" | "ok" | "data"; tag: string; text: string };
 
 const DECISIONS: Record<string, string> = { log_observation: "Log observation", raise_rfi: "Raise RFI", raise_ncr: "Raise NCR", stop_work: "Stop work", cancel: "Cancel" };
-const PROMPTS = ["What should I check before the L4 slab pour?", "What is the cover at E-1?", "Any open RFIs?"];
+const PROMPTS = ["What should I check before today's concrete pour?", "Which drawings are current?", "Any open RFIs?"];
 
 function useLog() {
   const [lines, setLines] = useState<LogLine[]>([]);
@@ -51,34 +51,37 @@ function useLog() {
 }
 
 export default function LiveVoice() {
+  const { project } = useDash();
   const [creds, setCreds] = useState<RtcToken | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<{ msg: string; status: number } | null>(null);
   const [replay, setReplay] = useState(false);
   const log = useLog();
+  const { push } = log;
 
   const start = useCallback(async () => {
     setConnecting(true);
     setError(null);
     setReplay(false);
-    log.push("info", "rtc", "requesting LiveKit token POST /api/rtc/token");
+    push("info", "rtc", "requesting LiveKit token POST /api/rtc/token");
     try {
-      const t = await api.rtcToken({ name: "Manager", language: "en-IN" });
-      log.push("ok", "rtc", `token issued · room ${t.room} · identity ${t.identity}`);
+      const t = await api.rtcToken({ name: "Manager", language: "en-IN", projectId: project.id });
+      push("ok", "rtc", `token issued · room ${t.room} · identity ${t.identity}`);
       setCreds(t);
     } catch (e) {
       const status = e instanceof ApiError ? e.status : 0;
-      log.push("error", "rtc", (e as Error).message);
+      push("error", "rtc", (e as Error).message);
       setError({ msg: (e as Error).message, status });
     } finally {
       setConnecting(false);
     }
-  }, [log]);
+  }, [project.id, push]);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("start") === "1") void start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (new URLSearchParams(window.location.search).get("start") !== "1") return;
+    const timer = window.setTimeout(() => void start(), 0);
+    return () => window.clearTimeout(timer);
+  }, [start]);
 
   return (
     <div>
@@ -270,7 +273,7 @@ function ReplayView({ onEnd, log }: { onEnd: () => void; log: ReturnType<typeof 
     let alive = true;
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     (async () => {
-      push("info", "replay", "recorded engine output · P1 Pithoragarh hospital · no audio sent");
+      push("info", "replay", "recorded demo engine output · no audio sent");
       push("state", "conn", "connected");
       push("info", "session", "tts rime mistv2 · speaker cove · websocket · speaker_required=true");
       await sleep(500);

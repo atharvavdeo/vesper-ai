@@ -250,10 +250,10 @@ export const apiV2 = {
   },
   ingestJobs: (projectId?: string) => request<IngestJob[]>(`/api/ingest/jobs${qs({ projectId })}`),
 
-  // v1 site record (demo project P1) + status
-  drawings: () => request<Drawing[]>("/api/drawings"),
-  rfis: () => request<Rfi[]>("/api/rfis"),
-  permits: () => request<Permit[]>("/api/permits"),
+  // v1 deterministic site record + status. projectId remains optional for older servers/callers.
+  drawings: (projectId?: string) => request<Drawing[]>(`/api/drawings${qs({ projectId })}`),
+  rfis: (projectId?: string) => request<Rfi[]>(`/api/rfis${qs({ projectId })}`),
+  permits: (projectId?: string) => request<Permit[]>(`/api/permits${qs({ projectId })}`),
   v2Status: () => request<V2Status>("/api/v2/status", { timeoutMs: 5_000 }),
 };
 

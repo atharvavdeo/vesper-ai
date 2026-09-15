@@ -1,41 +1,66 @@
 "use client";
-// v1 site record for the demo project (P1) with a short module cache so moving between pages
-// is instant, plus pure derivations the dashboard uses when v2 endpoints aren't live yet.
-import { useCallback, useEffect, useState } from "react";
+// Project-scoped v1 site records with a short module cache so moving between pages is instant,
+// plus pure derivations the dashboard uses when v2 endpoints aren't live yet.
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ObservationRow } from "@/lib/api";
 import { apiV2, type Activity, type Drawing, type GraphData, type Permit, type Rfi } from "@/lib/api-v2";
+import { useDash } from "./context";
 
 export type SiteRecord = { drawings: Drawing[]; rfis: Rfi[]; permits: Permit[]; observations: ObservationRow[] };
 
-let cache: { at: number; promise: Promise<SiteRecord> } | null = null;
+type CacheEntry = { at: number; promise: Promise<SiteRecord> };
+const cache = new Map<string, CacheEntry>();
 
-export function loadSiteRecord(force = false): Promise<SiteRecord> {
-  if (!force && cache && Date.now() - cache.at < 30_000) return cache.promise;
-  const promise = Promise.all([apiV2.drawings(), apiV2.rfis(), apiV2.permits(), api.observations()]).then(
+export function loadSiteRecord(force?: boolean): Promise<SiteRecord>;
+export function loadSiteRecord(projectId?: string, force?: boolean): Promise<SiteRecord>;
+export function loadSiteRecord(projectIdOrForce: string | boolean = "P1", force = false): Promise<SiteRecord> {
+  // Keep loadSiteRecord(true) working for callers from before project switching existed.
+  const projectId = typeof projectIdOrForce === "string" ? projectIdOrForce : "P1";
+  const shouldForce = typeof projectIdOrForce === "boolean" ? projectIdOrForce : force;
+  const existing = cache.get(projectId);
+  if (!shouldForce && existing && Date.now() - existing.at < 30_000) return existing.promise;
+  const promise = Promise.all([
+    apiV2.drawings(projectId),
+    apiV2.rfis(projectId),
+    apiV2.permits(projectId),
+    api.observations(projectId),
+  ]).then(
     ([drawings, rfis, permits, observations]) => ({ drawings, rfis, permits, observations }),
   );
-  cache = { at: Date.now(), promise };
+  cache.set(projectId, { at: Date.now(), promise });
   promise.catch(() => {
-    cache = null;
+    if (cache.get(projectId)?.promise === promise) cache.delete(projectId);
   });
   return promise;
 }
 
-export function useSiteRecord() {
+export function useSiteRecord(projectIdOverride?: string) {
+  const { project } = useDash();
+  const projectId = projectIdOverride ?? project.id;
   const [data, setData] = useState<SiteRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const requestId = useRef(0);
   const run = useCallback((force: boolean) => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
-    loadSiteRecord(force)
+    loadSiteRecord(projectId, force)
       .then((d) => {
+        if (requestId.current !== currentRequest) return;
         setData(d);
         setError(null);
       })
-      .catch((e) => setError((e as Error).message))
-      .finally(() => setLoading(false));
-  }, []);
-  useEffect(() => run(false), [run]);
+      .catch((e) => {
+        if (requestId.current === currentRequest) setError((e as Error).message);
+      })
+      .finally(() => {
+        if (requestId.current === currentRequest) setLoading(false);
+      });
+  }, [projectId]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => run(false), 0);
+    return () => window.clearTimeout(timer);
+  }, [run]);
   return { data, error, loading, reload: () => run(true) };
 }
 
@@ -92,7 +117,7 @@ export function deriveActivity(rec: SiteRecord): Activity[] {
       kind: "observation",
       id: o.observation_id,
       title: `${o.observation_id} · ${o.element} ${o.attribute} ${o.value_claimed}${o.unit ?? ""}`,
-      detail: `${o.location_id.replace(/^P1:/, "")} → ${o.drawing_id} · ${o.final_decision.replace(/_/g, " ")}`,
+      detail: `${o.location_id.replace(/^[^:]+:/, "")} → ${o.drawing_id} · ${o.final_decision.replace(/_/g, " ")}`,
       at: o.created_at,
       tone: o.final_decision === "log_observation" ? "ok" : o.final_decision === "raise_rfi" ? "warn" : "danger",
     });
@@ -107,7 +132,7 @@ export function deriveActivity(rec: SiteRecord): Activity[] {
   return a.sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
 }
 
-/** A knowledge graph assembled from the deterministic record (used until W1's Kuzu graph is live). */
+/** A knowledge graph assembled from the deterministic record when the memory graph is unavailable. */
 export function deriveGraph(rec: SiteRecord): GraphData {
   const nodes = new Map<string, { id: string; label: string; type: string }>();
   const edges: { source: string; target: string; label?: string }[] = [];
@@ -115,8 +140,14 @@ export function deriveGraph(rec: SiteRecord): GraphData {
     if (!nodes.has(id)) nodes.set(id, { id, label, type });
     return id;
   };
-  const loc = (l?: string | null) => (l ? node(`loc:${l}`, l.replace(/^P1:/, ""), "location") : null);
-  const proj = node("project:P1", "P1 Hospital", "project");
+  const projectId =
+    rec.drawings[0]?.project_id ?? rec.rfis[0]?.project_id ?? rec.permits[0]?.project_id ?? "project";
+  const loc = (l?: string | null) => {
+    if (!l) return null;
+    const prefix = `${projectId}:`;
+    return node(`loc:${l}`, l.startsWith(prefix) ? l.slice(prefix.length) : l, "location");
+  };
+  const proj = node(`project:${projectId}`, projectId, "project");
   for (const d of rec.drawings) {
     const sheet = node(`dwg:${d.drawing_number}`, d.drawing_number, "drawing");
     const rev = node(`rev:${d.drawing_id}`, `${d.drawing_number} ${d.revision}`, d.is_latest ? "revision" : "superseded");

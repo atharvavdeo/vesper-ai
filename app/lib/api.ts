@@ -186,7 +186,7 @@ export const api = {
   health: () => req<Health>("/api/health"),
 
   // LiveKit real-time token. 503 until LIVEKIT_* is configured on the backend.
-  rtcToken: (body?: { name?: string; language?: "en-IN" | "hi-IN" }) =>
+  rtcToken: (body?: { name?: string; language?: "en-IN" | "hi-IN"; projectId?: string }) =>
     req<RtcToken>("/api/rtc/token", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -275,7 +275,8 @@ export const api = {
     return req<{ text: string }>("/api/stt", { method: "POST", body: fd });
   },
 
-  observations: () => req<ObservationRow[]>("/api/observations"),
+  observations: (projectId?: string) =>
+    req<ObservationRow[]>(`/api/observations${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`),
 
   conversations: () =>
     req<{
@@ -289,8 +290,10 @@ export const api = {
       commandLimit: number | null;
       commandsUsed: number;
     }>("/api/conversations"),
-  observation: (id: string) =>
-    req<ObservationDetail>(`/api/observations/${encodeURIComponent(id)}`),
+  observation: (id: string, projectId?: string) =>
+    req<ObservationDetail>(
+      `/api/observations/${encodeURIComponent(id)}${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`,
+    ),
 
   scenarios: () => req<ScenarioMeta[]>("/api/scenarios"),
   runScenarios: (ids?: string[]) =>
