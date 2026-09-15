@@ -38,16 +38,27 @@ RIME_LANG_EN = os.getenv("RIME_LANG_EN", "eng")
 RIME_MODEL_EN = os.getenv("RIME_MODEL_EN", "mistv3")
 RIME_ENABLED = bool(RIME_API_KEY) and not RIME_API_KEY.startswith("<")
 
-# ---- LLM (Cerebras primary -> NVIDIA -> Groq) ----
+# ---- LLM (Groq gpt-oss-120b primary -> Cerebras gpt-oss-120b -> NVIDIA) ----
 CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY", "").strip()
 CEREBRAS_BASE_URL = os.getenv("CEREBRAS_BASE_URL", "https://api.cerebras.ai/v1")
 CEREBRAS_LLM_MODEL = os.getenv("CEREBRAS_LLM_MODEL", "gpt-oss-120b")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "").strip()
 NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
-NVIDIA_LLM_MODEL = os.getenv("NVIDIA_LLM_MODEL", "nvidia/llama-3.1-nemotron-70b-instruct")
+NVIDIA_LLM_MODEL = os.getenv("NVIDIA_LLM_MODEL", "openai/gpt-oss-120b")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-GROQ_LLM_MODEL = os.getenv("GROQ_LLM_MODEL", "openai/gpt-oss-20b")
+# llama-3.3-70b-versatile is retired on Groq; gpt-oss-120b verified 2026-09-15.
+GROQ_LLM_MODEL = os.getenv("GROQ_LLM_MODEL", "openai/gpt-oss-120b")
+GROQ_STT_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3")
+
+# ---- STT (Sarvam saaras:v3 primary -> Groq Whisper fallback) ----
+STT_PROVIDER = os.getenv("STT_PROVIDER", "sarvam").strip().lower()
+SARVAM_API_KEY = os.getenv("SARVAM_API_KEY", "").strip()
+SARVAM_STT_MODEL = os.getenv("SARVAM_STT_MODEL", "saaras:v3").strip()
+SARVAM_STT_MODE = os.getenv("SARVAM_STT_MODE", "transcribe").strip()
+# REST uses "unknown" for auto-detect; the realtime websocket calls the same thing "auto".
+SARVAM_STT_LANGUAGE = os.getenv("SARVAM_STT_LANGUAGE", "unknown").strip().replace("auto", "unknown")
+SARVAM_STT_KEYTERMS = _bool(os.getenv("SARVAM_STT_KEYTERMS"), True)  # site vocabulary biasing (REST)
 
 
 def _key_ok(k: str) -> bool:
@@ -57,15 +68,16 @@ def _key_ok(k: str) -> bool:
 CEREBRAS_ENABLED = _key_ok(CEREBRAS_API_KEY)
 NVIDIA_ENABLED = _key_ok(NVIDIA_API_KEY)
 GROQ_ENABLED = _key_ok(GROQ_API_KEY)
+SARVAM_ENABLED = _key_ok(SARVAM_API_KEY)
 
 
 def llm_provider() -> str:
+    if GROQ_ENABLED:
+        return "groq"
     if CEREBRAS_ENABLED:
         return "cerebras"
     if NVIDIA_ENABLED:
         return "nvidia"
-    if GROQ_ENABLED:
-        return "groq"
     return "off"
 
 

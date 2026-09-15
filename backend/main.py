@@ -192,47 +192,34 @@ async def rtc_token(request: Request) -> dict:
     return {"url": lk_url, "token": tok.to_jwt(), "room": room, "identity": identity}
 
 
-# ---------------------------------------------------------------- STT (Groq Whisper fallback)
+# ---------------------------------------------------------------- STT (Sarvam, Groq Whisper fallback)
 @app.post("/api/stt")
 async def stt(file: UploadFile = File(...), language: str = Form("")):
     """Server-side speech-to-text. Browser webkitSpeechRecognition fails on most Linux
     Chromium builds ('network' error); the frontend records with MediaRecorder and posts
-    the blob here. Uses Groq's free Whisper endpoint (OpenAI-compatible)."""
-    if not config.GROQ_ENABLED:
-        return JSONResponse({"error": "no STT provider (GROQ_API_KEY missing)"}, status_code=503)
+    the blob here. Sarvam saaras:v3 REST first (Indian English / Hinglish), Groq Whisper
+    large-v3 as automatic fallback (backend/stt_sarvam.py). Response shape: {"text": str}."""
+    import stt_sarvam
+
+    if not stt_sarvam.providers():
+        return JSONResponse({"error": "no STT provider (SARVAM_API_KEY / GROQ_API_KEY missing)"},
+                            status_code=503)
     raw = await file.read()
     if not raw:
         raise HTTPException(422, "empty audio")
-    # Same model + domain-biasing prompt as the live agent (agent/worker.py STT_PROMPT):
-    # Whisper continues the style of the prompt, so a sample site transcript pushes decoding
-    # toward grid refs, drawing numbers and revisions the parser depends on.
-    data = {"model": os.getenv("GROQ_STT_MODEL", "whisper-large-v3"),
-            "response_format": "json", "temperature": "0",
-            "prompt": ("Column line C-5, rebar spacing 180 millimetres, drawing A-102 revision R4. "
-                       "Cover at B-4 column is 40 millimetres per IS 456. Stirrup spacing at C-6 "
-                       "measured 220. Zone B Level 3 hot work permit HWP-0112, fire watch pending, "
-                       "stop work. L4 slab thickness 150 millimetres on S-301 revision R2, RFI-050 "
-                       "still open. Raise an NCR. Log the observation.")}
-    if language:
-        data["language"] = language
+    language = language if isinstance(language, str) else ""  # direct calls pass the Form default
     try:
-        async with httpx.AsyncClient(timeout=30.0) as cx:
-            r = await cx.post(
-                f"{config.GROQ_BASE_URL}/audio/transcriptions",
-                headers={"Authorization": f"Bearer {config.GROQ_API_KEY}"},
-                data=data,
-                files={"file": (file.filename or "turn.webm", raw,
-                                file.content_type or "audio/webm")})
-        if r.status_code != 200:
-            return _stt_error_response(r.status_code, r.text)
-        try:
-            return {"text": (r.json().get("text") or "").strip()}
-        except (ValueError, AttributeError):
+        out = await stt_sarvam.transcribe(raw, file.filename or "turn.webm",
+                                          file.content_type or "audio/webm", language)
+        return {"text": out["text"]}
+    except stt_sarvam.SttError as e:  # every configured provider failed; map the last one
+        if e.status == 0:
+            return JSONResponse({"error": "STT provider timed out"}, status_code=504)
+        if e.status == -1:
+            return JSONResponse({"error": "STT provider is unavailable"}, status_code=503)
+        if e.detail == "invalid provider response":
             return JSONResponse({"error": "invalid STT provider response"}, status_code=502)
-    except httpx.TimeoutException:
-        return JSONResponse({"error": "STT provider timed out"}, status_code=504)
-    except httpx.HTTPError:
-        return JSONResponse({"error": "STT provider is unavailable"}, status_code=503)
+        return _stt_error_response(e.status, e.detail)
 
 
 # ---------------------------------------------------------------- speaker enrollment
@@ -521,3 +508,23 @@ def rfis(request: Request) -> list[dict]:
 def permits(request: Request) -> list[dict]:
     _user_id(request)
     return _repo.permits_with_checks()
+
+
+# ---------------------------------------------------------------- v2 routers
+# Memory layer, ingestion and tenancy/onboarding live in routes/*. Each import is optional so
+# the v1 API above still boots while a module is being built; the failure is printed, not hidden.
+import importlib as _importlib
+
+V2_ROUTERS: dict[str, str] = {}
+for _mod in ("routes.memory", "routes.ingest", "routes.tenancy"):
+    try:
+        app.include_router(_importlib.import_module(_mod).router)
+        V2_ROUTERS[_mod] = "ok"
+    except Exception as _exc:  # noqa: BLE001
+        V2_ROUTERS[_mod] = repr(_exc)[:200]
+        print(f"[v2] {_mod} not loaded: {_exc!r}")
+
+
+@app.get("/api/v2/status")
+def v2_status() -> dict:
+    return {"routers": V2_ROUTERS}
