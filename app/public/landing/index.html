@@ -1338,6 +1338,19 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
   .js .reveal { opacity: 1; transform: none; }
   .sc-track { scroll-behavior: auto; }
 }
+
+/* stack marquee */
+.stack { padding: 28px 0 8px; }
+.stack-h { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-align: center; margin-bottom: 18px; }
+.marquee { overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+.marquee-track { display: flex; width: max-content; gap: 12px; animation: vesper-marquee 48s linear infinite; }
+.marquee-track .dup { display: flex; gap: 12px; }
+.marquee:hover .marquee-track { animation-play-state: paused; }
+.tech { display: inline-flex; align-items: center; gap: 9px; padding: 9px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.03); color: #d6d6d6; font-size: 14px; letter-spacing: -.01em; white-space: nowrap; }
+.tech-ic { width: 18px; height: 18px; flex: none; background: currentColor; -webkit-mask: var(--ic) center / contain no-repeat; mask: var(--ic) center / contain no-repeat; }
+.tech-ic.mono { background: rgba(255,255,255,.12); -webkit-mask: none; mask: none; border-radius: 50%; font: 600 10px/18px var(--mono); text-align: center; font-style: normal; color: #fff; }
+@keyframes vesper-marquee { from { transform: translateX(0); } to { transform: translateX(calc(-50% - 6px)); } }
+@media (prefers-reduced-motion: reduce) { .marquee-track { animation-duration: 240s; } }
 </style>
 </head>
 <body style="background:#000;color:#fff">
@@ -1436,7 +1449,7 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
           <rect x="13.4" y="2.6" width="7.2" height="18.8" rx="3.6" fill="url(#pr)"/>
           <rect x="9.2" y="10.9" width="5.6" height="2.2" rx="1.1" fill="#4a4a4a"/>
         </svg>
-        IS codes + 550 QA/QC templates in memory
+        IS codes, 550 QA/QC templates + your PDFs in memory
       </span>
       <span class="stat appear appear--stat" style="--d:1.28s">
         <svg class="stat-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -1468,6 +1481,15 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
 </div>
 
 <div class="ext">
+
+  <!-- STACK MARQUEE -->
+  <section class="stack" aria-labelledby="stack-h">
+    <div class="wrap"><p class="stack-h" id="stack-h">Built end to end on</p></div>
+    <div class="marquee" role="list" aria-label="Technology used">
+      <div class="marquee-track"><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/nextdotjs.svg)"></i>Next.js</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/react.svg)"></i>React</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/typescript.svg)"></i>TypeScript</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/tailwindcss.svg)"></i>Tailwind CSS</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/python.svg)"></i>Python</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/fastapi.svg)"></i>FastAPI</span><span class="tech"><i class="tech-ic mono">L</i>LiveKit</span><span class="tech"><i class="tech-ic mono">S</i>Sarvam AI</span><span class="tech"><i class="tech-ic mono">R</i>Rime</span><span class="tech"><i class="tech-ic mono">G</i>Groq</span><span class="tech"><i class="tech-ic mono">C</i>Cerebras</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/openai.svg)"></i>OpenAI</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/anthropic.svg)"></i>Anthropic</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/ollama.svg)"></i>Ollama</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/huggingface.svg)"></i>bge-m3</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/pytorch.svg)"></i>PyTorch</span><span class="tech"><i class="tech-ic mono">L</i>LanceDB</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/sqlite.svg)"></i>SQLite</span><span class="tech"><i class="tech-ic mono">C</i>Cognee</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/neo4j.svg)"></i>Neo4j</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/supabase.svg)"></i>Supabase</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/clerk.svg)"></i>Clerk</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/resend.svg)"></i>Resend</span><span class="tech"><i class="tech-ic mono">P</i>PyMuPDF</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/cloudflare.svg)"></i>Cloudflare</span><span class="tech"><i class="tech-ic mono">D</i>Driver.js</span><span aria-hidden="true" class="dup"><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/nextdotjs.svg)"></i>Next.js</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/react.svg)"></i>React</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/typescript.svg)"></i>TypeScript</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/tailwindcss.svg)"></i>Tailwind CSS</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/python.svg)"></i>Python</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/fastapi.svg)"></i>FastAPI</span><span class="tech"><i class="tech-ic mono">L</i>LiveKit</span><span class="tech"><i class="tech-ic mono">S</i>Sarvam AI</span><span class="tech"><i class="tech-ic mono">R</i>Rime</span><span class="tech"><i class="tech-ic mono">G</i>Groq</span><span class="tech"><i class="tech-ic mono">C</i>Cerebras</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/openai.svg)"></i>OpenAI</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/anthropic.svg)"></i>Anthropic</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/ollama.svg)"></i>Ollama</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/huggingface.svg)"></i>bge-m3</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/pytorch.svg)"></i>PyTorch</span><span class="tech"><i class="tech-ic mono">L</i>LanceDB</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/sqlite.svg)"></i>SQLite</span><span class="tech"><i class="tech-ic mono">C</i>Cognee</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/neo4j.svg)"></i>Neo4j</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/supabase.svg)"></i>Supabase</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/clerk.svg)"></i>Clerk</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/resend.svg)"></i>Resend</span><span class="tech"><i class="tech-ic mono">P</i>PyMuPDF</span><span class="tech"><i class="tech-ic" style="--ic:url(https://cdn.jsdelivr.net/npm/simple-icons@13.21.0/icons/cloudflare.svg)"></i>Cloudflare</span><span class="tech"><i class="tech-ic mono">D</i>Driver.js</span></span></div>
+    </div>
+  </section>
+
 
   <!-- 01 PROBLEM -->
   <section class="section" id="problem" aria-labelledby="problem-h">
@@ -1648,10 +1670,10 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
 
         <article class="b-card glass hoverable reveal" style="--d:0.04s">
           <span class="b-ico"><svg><use href="#i-list"/></svg></span>
-          <h3 class="h3">Template-aware <em>memory</em></h3>
-          <p>It knows what each log needs before it’s filed — structured from 550+ Formats, QA/QC and PMC templates referenced to IS and CPWD.</p>
+          <h3 class="h3">Project <em>memory</em> from your PDFs</h3>
+          <p>Upload drawing registers, specs, BOQs and method statements as PDF, Word or Excel — or just speak a briefing. Every project gets its own isolated memory, searched with vectors, BM25 and a reranker, linked in a knowledge graph, and on top of 550+ QA/QC templates referenced to IS and CPWD. Answers cite the page; weak evidence gets an honest “not in the record”.</p>
           <div class="tags push">
-            <span class="tag">Pre-pour hold points</span><span class="tag">Hot-work fire watch</span><span class="tag">DPR fields</span><span class="tag">RFI log</span>
+            <span class="tag">PDF / DOCX / XLSX</span><span class="tag">Per-project memory</span><span class="tag">Citations</span><span class="tag">MCP-ready tools</span><span class="tag">Pre-pour hold points</span><span class="tag">Hot-work fire watch</span><span class="tag">DPR fields</span><span class="tag">RFI log</span>
           </div>
         </article>
 
