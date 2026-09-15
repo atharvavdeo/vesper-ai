@@ -145,6 +145,17 @@ def extract(raw: str) -> Extraction:
 
     # --- drawing numbers: A-102, "a 102", S-301, "drawing 102"
     dwg_mentions: list[dict] = []
+    # block-discipline-level-sheet convention (Nashik NSK: SSB-STR-L3-201); spoken short form "STR 201"
+    for m in _find_all(r"\bs\s?s\s?b\s?-?\s?(str|arc|mep|hvac|plb|ele|fir)\s?-?\s?(b[12]|gf|tr|l[1-7])\s?-?\s?(\d{3})\b",
+                       work):
+        dwg_mentions.append({"value": f"SSB-{m.group(1).upper()}-{m.group(2).upper()}-{m.group(3)}",
+                             "start": m.start(), "end": m.end(), "confidence": 0.95, "raw": m.group(0)})
+    for m in _find_all(r"\b(str|arc|mep|hvac|plb|ele|fir)\s?-?\s?(\d{3})\b", work):
+        if not any(d["start"] <= m.start() < d["end"] for d in dwg_mentions):
+            dwg_mentions.append({"value": m.group(2), "start": m.start(), "end": m.end(),
+                                 "confidence": 0.85, "raw": m.group(0)})
+    for d in dwg_mentions:
+        work = _mask(work, d["start"], d["end"])
     for m in _find_all(r"\b([a-z])\s?-?\s?(\d{3})\b", work):
         m0 = m.group(0)
         explicit = bool(re.search(r"[a-z]-\d", m0) or re.match(r"[a-z]\d", m0))
@@ -182,7 +193,9 @@ def extract(raw: str) -> Extraction:
     for m in _find_all(r"\b(?:l|level|lvl|floor|manzil|tal)\s?-?\s?(\d{1,2})\b", work):
         lvl_mentions.append({"value": f"L{int(m.group(1))}", "start": m.start(),
                              "end": m.start() + len(m.group(0)), "confidence": 0.95, "raw": m.group(0)})
-    for m in _find_all(r"\b(\d{1,2})\s?(?:st|nd|rd|th)?\s+(?:floor|level|manzil|slab)\b", work):
+    # Do not treat the numeric half of a grid such as "C-7 level 3" as
+    # "7 level". The explicit "level 3" matcher above supplies the real level.
+    for m in _find_all(r"(?<![-/])\b(\d{1,2})\s?(?:st|nd|rd|th)?\s+(?:floor|level|manzil|slab)\b", work):
         lvl_mentions.append({"value": f"L{int(m.group(1))}", "start": m.start(),
                              "end": m.start() + len(m.group(0)), "confidence": 0.9, "raw": m.group(0)})
     ord_re = r"\b(" + "|".join(ORDINALS.keys()) + r")\s+(floor|level|manzil|mala|maala|tal|slab)\b"
@@ -212,8 +225,14 @@ def extract(raw: str) -> Extraction:
     # These are project-memory locations, not generic construction terms. Keep them explicit so
     # a manager can naturally say "ambulance road retaining wall" without needing a grid code.
     named_grid_mentions: list[dict] = []
-    for m in _find_all(r"\b(?:rw\s?-?\s?1|retaining\s+wall(?:\s+(?:one|1))?|ambulance\s+road\s+wall)\b", work):
+    for m in _find_all(r"\b(?:rw\s?-?\s?1|(?<!north )retaining\s+wall(?:\s+(?:one|1))?|ambulance\s+road\s+wall)\b", work):
         named_grid_mentions.append({"value": "RW-1", "start": m.start(), "end": m.start() + len(m.group(0)),
+                                    "confidence": 0.95, "raw": m.group(0)})
+    for m in _find_all(r"\b(?:rw\s?-?\s?n\s?-?\s?1|north\s+retaining\s+wall)\b", work):
+        named_grid_mentions.append({"value": "RW-N1", "start": m.start(), "end": m.end(),
+                                    "confidence": 0.95, "raw": m.group(0)})
+    for m in _find_all(r"\b(?:sump|sump\s+pit|sump\s+tank)\b", work):
+        named_grid_mentions.append({"value": "SUMP-1", "start": m.start(), "end": m.end(),
                                     "confidence": 0.95, "raw": m.group(0)})
     for m in _find_all(r"\b(?:wt\s?-?\s?1|hospital\s+water\s+tank|overhead\s+water\s+tank)\b", work):
         named_grid_mentions.append({"value": "WT-1", "start": m.start(), "end": m.start() + len(m.group(0)),

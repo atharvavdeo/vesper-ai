@@ -55,15 +55,19 @@ _STATUS_RX = __import__("re").compile(
 
 
 def _live_site_hit(org_id: str | None, project_id: str | None, query: str) -> dict | None:
-    """P1's site record is live in site.db: status questions (permits, hold points, RFIs, blockers, pours) get a
+    """An operational site record is live in site.db: status questions get a
     passage built by the deterministic engine at query time instead of a stale indexed snapshot."""
-    if project_id != config.DEMO_PROJECT or (org_id and org_id != config.DEMO_ORG) or not _STATUS_RX.search(query or ""):
+    if not project_id or (org_id and org_id != config.DEMO_ORG) or not _STATUS_RX.search(query or ""):
         return None
     try:
         import db as dbmod  # backend/db.py (site.db)
         from engine import answer as eng
 
-        repo = dbmod.Repo(dbmod.connect(), project_id)
+        conn = dbmod.connect()
+        repo = dbmod.Repo(conn, project_id)
+        if not repo._one("SELECT 1 FROM projects WHERE project_id = ?", (project_id,)):
+            conn.close()
+            return None
         q = (query or "").lower()
         labels = {"permit": "PERMITS", "hold": "HOLD POINTS", "rfi": "OPEN RFIs", "blockers": "ALL BLOCKERS"}
         sections = {k: eng._topic_answer(repo, k) for k in labels}  # noqa: SLF001
@@ -72,6 +76,7 @@ def _live_site_hit(org_id: str | None, project_id: str | None, query: str) -> di
         # the section the question is about comes first, so the answer leads with it
         order = sorted(labels, key=lambda k: (0 if focus[k] else 1, list(labels).index(k)))
         text = "\n".join(f"{labels[k]}: {sections[k]}" for k in order if sections.get(k))
+        conn.close()
     except Exception as e:  # noqa: BLE001
         print(f"[memory] live site status unavailable: {e!r}"[:200])
         return None

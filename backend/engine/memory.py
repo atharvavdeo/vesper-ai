@@ -244,10 +244,14 @@ def recall(repo, query: str, limit: int = 5) -> dict:
     if sum(len(v) for k, v in out.items() if isinstance(v, list)) < 3 and t:
         fts = " OR ".join(f'"{w}"' for w in t)
         try:
+            # scoped: this project's rows + shared templates (P1's legacy clause notes have project_id NULL)
             out["reference_docs"] = repo._all(
-                "SELECT doc_type, doc_ref, substr(content,1,240) AS snippet "
-                "FROM doc_chunks_fts WHERE doc_chunks_fts MATCH ? "
-                "ORDER BY (doc_type = 'template'), bm25(doc_chunks_fts) LIMIT 3", (fts,))
+                "SELECT doc_chunks_fts.doc_type AS doc_type, doc_chunks_fts.doc_ref AS doc_ref, "
+                "substr(doc_chunks_fts.content,1,240) AS snippet "
+                "FROM doc_chunks_fts JOIN doc_chunks c ON c.chunk_id = doc_chunks_fts.rowid "
+                "WHERE doc_chunks_fts MATCH ? AND (c.project_id = ? OR (c.project_id IS NULL AND "
+                "(c.doc_type <> 'code_clause' OR ? = 'P1'))) "
+                "ORDER BY (doc_chunks_fts.doc_type = 'template'), bm25(doc_chunks_fts) LIMIT 3", (fts, pid, pid))
         except Exception:
             pass
     # drop empty sections: smaller tool payloads mean faster LLM turns

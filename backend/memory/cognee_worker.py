@@ -35,15 +35,20 @@ def configure_env(use_cerebras: bool = False) -> None:
     sys_dir = config.COGNEE_DIR / "system"
     sys_dir.mkdir(parents=True, exist_ok=True)
     config.COGNEE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    bundled_lbug = BACKEND.parent / "data" / "vendor" / "ladybug" / "v0.19.0" / "liblbug.dylib"
+    if bundled_lbug.is_file():
+        # Cognee 1.5.4 pins Ladybug 0.19.0. Use the matching, digest-verified C API
+        # release locally and bypass the macOS wheel's optional pybind extension.
+        os.environ.setdefault("LBUG_C_API_LIB_PATH", str(bundled_lbug))
+        os.environ.setdefault("LBUG_PYTHON_BACKEND", "capi")
+    graph_provider = os.getenv("COGNEE_GRAPH_PROVIDER", "ladybug" if bundled_lbug.is_file() else "turso")
+    graph_suffix = "ladybug" if graph_provider in ("ladybug", "kuzu") else "libsql"
     env = {
         "SYSTEM_ROOT_DIRECTORY": str(sys_dir), "DATA_ROOT_DIRECTORY": str(config.COGNEE_DATA_DIR),
         "DB_PROVIDER": "sqlite", "DB_NAME": "cognee_db", "VECTOR_DB_PROVIDER": "lancedb",
-        # Kuzu/Ladybug needs a native C-API dylib that the 0.19 wheel does not ship on macOS; "turso" is Cognee's
-        # file-based libSQL/SQLite graph adapter (pure aiosqlite). Override with COGNEE_GRAPH_PROVIDER=kuzu when
-        # LBUG_C_API_LIB_PATH is available.
-        "GRAPH_DATABASE_PROVIDER": os.getenv("COGNEE_GRAPH_PROVIDER", "turso"),
-        "GRAPH_DATABASE_URL": os.getenv("COGNEE_GRAPH_URL", str(config.COGNEE_DIR / "system" / "graph.libsql")),
-        "GRAPH_DATASET_DATABASE_HANDLER": os.getenv("COGNEE_GRAPH_HANDLER", "turso"),
+        "GRAPH_DATABASE_PROVIDER": graph_provider,
+        "GRAPH_DATABASE_URL": os.getenv("COGNEE_GRAPH_URL", str(config.COGNEE_DIR / "system" / f"graph.{graph_suffix}")),
+        "GRAPH_DATASET_DATABASE_HANDLER": os.getenv("COGNEE_GRAPH_HANDLER", graph_provider),
         # auto Alembic migrations import the Ladybug C-API on this wheel and fail; tables are created on first use
         "ENABLE_AUTO_MIGRATIONS": os.getenv("COGNEE_AUTO_MIGRATIONS", "false"),
         "ENABLE_BACKEND_ACCESS_CONTROL": "false",  # scoping is enforced by Vesper; one shared graph, node sets per dataset

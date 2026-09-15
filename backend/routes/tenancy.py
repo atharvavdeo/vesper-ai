@@ -422,27 +422,31 @@ def overview(project_id: str, ident: Identity = Depends(get_identity)) -> dict:
     finally:
         conn.close()
     source = "app.db"
-    if project_id == DEMO_PROJECT_ID:
-        source = "site.db"
+    try:
+        s = sqlite3.connect(f"file:{config.SITE_DB_PATH}?mode=ro", uri=True, timeout=3)
         try:
-            s = sqlite3.connect(f"file:{config.SITE_DB_PATH}?mode=ro", uri=True, timeout=3)
-            try:
+            has_site_record = s.execute("SELECT 1 FROM projects WHERE project_id = ?", (project_id,)).fetchone()
+            if has_site_record:
+                source = "site.db"
                 counts["drawings"] = _count(s, "SELECT COUNT(*) FROM v_latest_drawings WHERE project_id = ?", (project_id,)) or 0
                 counts["drawingRevisions"] = _count(s, "SELECT COUNT(*) FROM drawings WHERE project_id = ?", (project_id,)) or 0
                 counts["rfisOpen"] = _count(s, "SELECT COUNT(*) FROM rfis WHERE project_id = ? AND status = 'Open'", (project_id,)) or 0
                 counts["permitsActive"] = _count(s, "SELECT COUNT(*) FROM permits WHERE project_id = ? AND status = 'Active'", (project_id,)) or 0
-                counts["holdPoints"] = _count(s, "SELECT COUNT(*) FROM v_open_hold_points") or 0
+                counts["holdPoints"] = _count(s, "SELECT COUNT(*) FROM checklist_instances WHERE project_id = ? "
+                                                    "AND hold_point_released = 0", (project_id,)) or 0
                 counts["observations"] = _count(s, "SELECT COUNT(*) FROM field_observations WHERE project_id = ?", (project_id,)) or 0
-                counts["permitBlockers"] = _count(s, "SELECT COUNT(*) FROM v_permit_blockers") or 0
+                counts["permitBlockers"] = _count(s, "SELECT COUNT(*) FROM v_permit_blockers b JOIN permits p "
+                                                        "ON p.permit_id = b.permit_id WHERE p.project_id = ?",
+                                                   (project_id,)) or 0
                 if not counts["chunks"]:
-                    counts["chunks"] = _count(s, "SELECT COUNT(*) FROM doc_chunks") or 0
+                    counts["chunks"] = _count(s, "SELECT COUNT(*) FROM doc_chunks WHERE project_id = ?", (project_id,)) or 0
                 obs = s.execute("SELECT observation_id, structured_summary, final_decision, contradiction_flag, created_at "
                                 "FROM field_observations WHERE project_id = ? ORDER BY created_at DESC LIMIT 10", (project_id,)).fetchall()
                 recent += [{"kind": "observation", "summary": o[1], "actor": o[2], "createdAt": o[4], "id": o[0], "contradiction": bool(o[3])} for o in obs]
-            finally:
-                s.close()
-        except sqlite3.Error:
-            pass
+        finally:
+            s.close()
+    except sqlite3.Error:
+        pass
     recent.sort(key=lambda r: r.get("createdAt") or "", reverse=True)
     return {"project": _project_out(p, p["access"]), "counts": counts, "recent": recent[:20],
             "memory": {"pendingJobs": jobs or 0}, "source": source}

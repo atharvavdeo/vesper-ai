@@ -97,10 +97,12 @@ class Repo:
         return c
 
     def location_exists(self, location_id: str) -> bool:
-        return self._one("SELECT 1 FROM locations WHERE location_id = ?", (location_id,)) is not None
+        return self._one("SELECT 1 FROM locations WHERE project_id = ? AND location_id = ?",
+                         (self.project_id, location_id)) is not None
 
     def related_location_ids(self, location_id: str) -> list[str]:
-        l = self._one("SELECT * FROM locations WHERE location_id = ?", (location_id,))
+        l = self._one("SELECT * FROM locations WHERE project_id = ? AND location_id = ?",
+                      (self.project_id, location_id))
         ids = [location_id]
         if l and l.get("zone") and l.get("level"):
             rows = self._all(
@@ -129,7 +131,9 @@ class Repo:
             if _norm(d) == _norm(spoken):
                 return d
         if re.fullmatch(r"\d+", spoken or ""):
-            suffix = [d for d in alln if re.sub(r"\D", "", d) == re.sub(r"\D", "", spoken)]
+            # "102" -> A-102; "201" -> SSB-STR-L3-201 (sheet number = last digit group)
+            suffix = [d for d in alln if re.sub(r"\D", "", d) == spoken
+                      or (re.findall(r"\d+", d) or [""])[-1] == spoken]
             if len(suffix) == 1:
                 return suffix[0]
         return None
@@ -140,10 +144,12 @@ class Repo:
             "ORDER BY rev_ordinal DESC LIMIT 1", (self.project_id, drawing_number))
 
     def drawing_by_id(self, drawing_id: str) -> dict | None:
-        return self._one("SELECT * FROM drawings WHERE drawing_id = ?", (drawing_id,))
+        return self._one("SELECT * FROM drawings WHERE project_id = ? AND drawing_id = ?",
+                         (self.project_id, drawing_id))
 
     def is_verified_latest(self, drawing_id: str) -> bool:
-        return self._one("SELECT 1 FROM v_latest_drawings WHERE drawing_id = ?", (drawing_id,)) is not None
+        return self._one("SELECT 1 FROM v_latest_drawings WHERE project_id = ? AND drawing_id = ?",
+                         (self.project_id, drawing_id)) is not None
 
     def latest_drawing_for_location(self, location_id: str, level: str | None = None) -> dict | None:
         by_fact = self._one(
@@ -189,8 +195,8 @@ class Repo:
 
     def rfi_for_drawing(self, drawing_id: str) -> dict | None:
         return self._one(
-            "SELECT rfi_id, subject, answered_on FROM rfis WHERE resulting_drawing_id = ? LIMIT 1",
-            (drawing_id,))
+            "SELECT rfi_id, subject, answered_on FROM rfis WHERE project_id = ? AND resulting_drawing_id = ? LIMIT 1",
+            (self.project_id, drawing_id))
 
     # ---- permits ------------------------------------------------
     def permit_blockers(self, location_id: str, activity: str) -> dict:
@@ -307,7 +313,9 @@ def reserve_command(repo: Repo, user_id: str, limit: int) -> tuple[bool, int]:
 
 
 def sessions_for_user(repo: Repo, user_name: str, limit: int = 12) -> list[dict]:
-    return repo._all("SELECT session_id, started_at, ended_at, lang FROM voice_sessions WHERE user_name = ? ORDER BY started_at DESC LIMIT ?", (user_name, limit))
+    return repo._all("SELECT session_id, project_id, started_at, ended_at, lang FROM voice_sessions "
+                     "WHERE user_name = ? AND project_id = ? ORDER BY started_at DESC LIMIT ?",
+                     (user_name, repo.project_id, limit))
 
 
 def turns_for_session(repo: Repo, session_id: str) -> list[dict]:
@@ -325,8 +333,12 @@ def insert_turn(repo: Repo, t: dict) -> int:
     return int(cur.lastrowid)
 
 
-def _next_id(repo: Repo, table: str, col: str, prefix: str, width: int) -> str:
-    rows = repo.db.execute(f"SELECT {col} AS id FROM {table} WHERE {col} LIKE ?", (f"{prefix}%",)).fetchall()
+def _next_id(repo: Repo, table: str, col: str, prefix: str, width: int, *, project_scoped: bool = False) -> str:
+    if project_scoped:
+        rows = repo.db.execute(f"SELECT {col} AS id FROM {table} WHERE project_id = ? AND {col} LIKE ?",
+                               (repo.project_id, f"{prefix}%")).fetchall()
+    else:
+        rows = repo.db.execute(f"SELECT {col} AS id FROM {table} WHERE {col} LIKE ?", (f"{prefix}%",)).fetchall()
     mx = 0
     for r in rows:
         n = re.sub(r"\D", "", r["id"])
@@ -371,7 +383,11 @@ def insert_observation(repo: Repo, o: dict) -> str:
 
 def insert_rfi(repo: Repo, r: dict) -> str:
     """`r` keys: subject, locationId, drawingRef, question."""
-    rid = _next_id(repo, "rfis", "rfi_id", "RFI-", 3)
+    # keep the project's own numbering (P1 RFI-062, NSK RFI-SSB-013)
+    last = repo._one("SELECT rfi_id FROM rfis WHERE project_id = ? ORDER BY rfi_id DESC LIMIT 1", (repo.project_id,))
+    m = re.match(r"^(.*?-)(\d+)$", (last or {}).get("rfi_id") or "")
+    prefix, width = (m.group(1), len(m.group(2))) if m else ("RFI-", 3)
+    rid = _next_id(repo, "rfis", "rfi_id", prefix, width, project_scoped=True)
     tpl = "PMC-DSN-LOG-003" if repo.template("PMC-DSN-LOG-003") else None
     repo.db.execute(
         "INSERT INTO rfis (rfi_id, project_id, subject, location_id, drawing_ref, question, status, raised_on, template_id) "

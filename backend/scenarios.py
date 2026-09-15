@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sqlite3
+import sys
 import tempfile
 from pathlib import Path
 
@@ -16,12 +18,24 @@ import config
 import db as dbmod
 
 _STD_NOISE = {"none", "low", "medium", "high"}
-SCENARIOS_JSON = Path(config.BACKEND_DIR).parent / "data" / "seed" / "scenarios.json"
+SEED_DIR = Path(config.BACKEND_DIR).parent / "data" / "seed"
+SCENARIOS_JSON = SEED_DIR / "scenarios.json"
 
 
-def load_scenarios() -> list[dict]:
-    path = os.getenv("SCENARIOS_PATH") or str(SCENARIOS_JSON)
-    raw = json.loads(Path(path).read_text("utf-8"))
+def _scenario_path(project_id: str) -> Path:
+    """Return the suite for a project while keeping the original P1 filename stable."""
+    project = (project_id or "P1").strip().upper()
+    if not re.fullmatch(r"[A-Z0-9_-]+", project):
+        raise ValueError(f"invalid project id: {project_id!r}")
+    return SCENARIOS_JSON if project == "P1" else SEED_DIR / f"scenarios_{project.lower()}.json"
+
+
+def load_scenarios(project_id: str | None = None) -> list[dict]:
+    project = project_id or config.PROJECT_ID
+    path = Path(os.getenv("SCENARIOS_PATH") or _scenario_path(project))
+    if not path.is_file():
+        raise FileNotFoundError(f"scenario suite for project {project!r} not found: {path}")
+    raw = json.loads(path.read_text("utf-8"))
     return raw if isinstance(raw, list) else raw.get("scenarios", [])
 
 
@@ -137,13 +151,14 @@ def run_scenario(repo: dbmod.Repo, sc: dict) -> dict:
     }
 
 
-def run_all(ids: list[str] | None = None) -> dict:
-    scs = load_scenarios()
+def run_all(ids: list[str] | None = None, project_id: str | None = None) -> dict:
+    project = (project_id or config.PROJECT_ID).strip().upper()
+    scs = load_scenarios(project)
     if ids:
         scs = [s for s in scs if s["id"] in ids]
     copy = _temp_db_copy(config.SITE_DB_PATH)
     conn = dbmod.connect(copy)
-    repo = dbmod.Repo(conn, config.PROJECT_ID)
+    repo = dbmod.Repo(conn, project)
     results = []
     try:
         for sc in scs:
@@ -154,13 +169,19 @@ def run_all(ids: list[str] | None = None) -> dict:
     passed = sum(1 for r in results if r["pass"])
     wrong = sum(1 for r in results for f in r["failures"]
                 if "non-latest" in f or "unknown location" in f or f.startswith("logged "))
-    return {"passed": passed, "total": len(results), "wrongLogs": wrong, "results": results}
+    return {"projectId": project, "passed": passed, "total": len(results),
+            "wrongLogs": wrong, "results": results}
 
 
 if __name__ == "__main__":
-    import sys
+    import argparse
 
-    out = run_all(sys.argv[1:] or None)
+    parser = argparse.ArgumentParser(description="Run deterministic voice acceptance scenarios")
+    parser.add_argument("ids", nargs="*", help="optional scenario IDs (default: all)")
+    parser.add_argument("--project", default=config.PROJECT_ID,
+                        help="project suite and database scope (default: PROJECT_ID or P1)")
+    args = parser.parse_args()
+    out = run_all(args.ids or None, project_id=args.project)
     w = lambda s, n: (s[: n - 1] + "…") if len(s) > n else s.ljust(n)
     print(f"{w('ID',5)} {w('RESULT',7)} {w('TITLE',46)} {w('KINDS SEEN',40)} {w('DECISION',14)}")
     print("-" * 120)

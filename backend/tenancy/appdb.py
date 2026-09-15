@@ -21,6 +21,7 @@ SCHEMA_FILES = (REPO_ROOT / "data" / "app_schema.sql", BACKEND_DIR / "memory" / 
 
 DEMO_ORG_ID = "org_local_demo"
 DEMO_PROJECT_ID = "P1"
+NSK_PROJECT_ID = "NSK"
 
 _lock = threading.Lock()
 _applied: dict[str, tuple] = {}  # db path -> schema file mtimes already applied in this process
@@ -57,13 +58,11 @@ def connect(path: str | None = None) -> sqlite3.Connection:
 
 
 def _seed_demo(conn: sqlite3.Connection) -> None:
-    """Expose the deterministic site.db project P1 as a read-only demo in org_local_demo."""
+    """Expose deterministic site.db projects in the local demo organization."""
     ts = now_iso()
     conn.execute("INSERT OR IGNORE INTO orgs(id, name, profile_json, created_by, created_at) VALUES (?,?,?,?,?)",
                  (DEMO_ORG_ID, "Vesper Demo", json.dumps({"legalName": "Vesper Demo", "companyType": "contractor",
                                                            "city": "Pithoragarh", "state": "Uttarakhand"}), "system", ts))
-    if conn.execute("SELECT 1 FROM projects WHERE id = ?", (DEMO_PROJECT_ID,)).fetchone():
-        return
     profile: dict = {"name": "Pithoragarh District Hospital & Staff Quarters", "code": "P1", "projectType": "hospital",
                      "city": "Pithoragarh", "state": "Uttarakhand", "clientName": "Uttarakhand Health Infrastructure Development Agency",
                      "contractType": "item_rate", "startDate": "2026-03-02", "governingCodes": ["IS 456", "IS 1893", "IS 13920", "CPWD Specs"],
@@ -87,3 +86,17 @@ def _seed_demo(conn: sqlite3.Connection) -> None:
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (DEMO_PROJECT_ID, DEMO_ORG_ID, profile["name"], "P1", "hospital", "Pithoragarh", "Uttarakhand", "active",
          json.dumps(profile), "system", ts, ts))
+
+    nsk_profile_path = REPO_ROOT / "data" / "seed" / "profile_nsk.json"
+    if nsk_profile_path.exists():
+        try:
+            nsk = json.loads(nsk_profile_path.read_text())
+        except (OSError, ValueError):
+            nsk = {}
+        if nsk:
+            conn.execute(
+                "INSERT OR IGNORE INTO projects(id, org_id, name, code, type, city, state, status, profile_json, created_by, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (NSK_PROJECT_ID, DEMO_ORG_ID, nsk.get("name") or "Nashik Civil Hospital — 300-bed Super Speciality Block",
+                 "NSK", nsk.get("projectType") or "hospital", nsk.get("city") or "Nashik",
+                 nsk.get("state") or "Maharashtra", nsk.get("status") or "active", json.dumps(nsk), "system", ts, ts))

@@ -254,7 +254,11 @@ def _safe_all(repo, sql: str, args: tuple = ()) -> list[dict]:
 
 
 def _rfi_ids(raw: str) -> list[str]:
-    return list(dict.fromkeys(f"RFI-{int(n):03d}" for n in re.findall(r"\bRFI[\s\-]?(\d{1,4})\b", raw or "", re.I)))
+    out = []
+    for pfx, n in re.findall(r"\bRFI[\s\-]?(?:(?!(?:for|and|the|not|no|pe|par|ka|ki|ke|on|at|in|is|was|has)\b)"
+                             r"([A-Za-z]{2,4})[\s\-]?)?(\d{1,4})\b", raw or "", re.I):
+        out.append(f"RFI-{pfx.upper()}-{int(n):03d}" if pfx else f"RFI-{int(n):03d}")
+    return list(dict.fromkeys(out))
 
 
 def _explain_rfis(repo, ids: list[str], ex) -> str:

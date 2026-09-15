@@ -60,6 +60,8 @@ def loc_label(c, s: dict) -> str:
 def to_speech(t: str) -> str:
     t = re.sub(r"(\d+(?:\.\d+)?)\s?mm\b", r"\1 millimeter", t)
     t = re.sub(r"±\s?(\d+)", r"plus minus \1", t)
+    t = re.sub(r"\b(RFI|NCR)-([A-Z]{2,4})-0*(\d+)", lambda m: f"{' '.join(m.group(1))} {' '.join(m.group(2))} {m.group(3)}", t)
+    t = re.sub(r"\bSSB-([A-Z]+)-([A-Z0-9]+)-(\d{3})\b", lambda m: f"S S B {' '.join(m.group(1))} {m.group(2)} {m.group(3)}", t)
     t = re.sub(r"\bRFI-0*(\d+)", lambda m: f"R F I {m.group(1)}", t)
     t = re.sub(r"\bNCR\b", "N C R", t)
     t = re.sub(r"\bOBS-0*(\d+)", lambda m: f"observation number {m.group(1)}", t)

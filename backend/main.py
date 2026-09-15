@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 import config
 import db as dbmod
 from engine.speech import speakable
+from tenancy.auth import get_identity, require_project
 
 # --- engine (WS-A). Defensive import so the server still boots for frontend dev. -----
 try:
@@ -124,19 +125,32 @@ def _stt_error_response(upstream_status: int, detail: str) -> JSONResponse:
     return JSONResponse(body, status_code=502)
 
 
-def _session(sid: str, user: str) -> DialogueSession:
+def _project_repo(request: Request, project_id: str | None = None) -> dbmod.Repo:
+    """Authorize and bind a deterministic site-record repository to one project."""
+    pid = str(project_id or config.PROJECT_ID).strip() or config.PROJECT_ID
+    require_project(pid, get_identity(request))
+    repo = dbmod.Repo(_conn, pid)
+    if not repo._one("SELECT 1 FROM projects WHERE project_id = ?", (pid,)):
+        raise HTTPException(404, "project has no operational site record")
+    return repo
+
+
+def _session(sid: str, user: str, request: Request, project_id: str | None = None) -> DialogueSession:
     """Return the caller's dialogue session. Sessions live in memory for speed but are
     restored from voice_sessions after a backend restart, so the console never loses its
     session memory to a 404; another user's session id is refused."""
-    row = _repo._one("SELECT user_name FROM voice_sessions WHERE session_id = ?", (sid,))
+    row = _repo._one("SELECT user_name, project_id FROM voice_sessions WHERE session_id = ?", (sid,))
     if not row:
         _sessions.pop(sid, None)
         raise HTTPException(404, "unknown session")
     if row["user_name"] != user:
         raise HTTPException(403, "session belongs to another user")
+    if project_id and str(project_id) != row["project_id"]:
+        raise HTTPException(409, "session belongs to a different project")
+    repo = _project_repo(request, row["project_id"])
     s = _sessions.get(sid)
     if not s:
-        s = DialogueSession(_repo, sid, _llm)
+        s = DialogueSession(repo, sid, _llm)
         _sessions[sid] = s
     return s
 
@@ -176,6 +190,8 @@ async def rtc_token(request: Request) -> dict:
         body = await request.json()
     except Exception:
         body = {}
+    project_id = str((body or {}).get("projectId") or config.PROJECT_ID)
+    _project_repo(request, project_id)
     import uuid as _uuid
 
     from livekit.api import AccessToken, VideoGrants
@@ -186,7 +202,8 @@ async def rtc_token(request: Request) -> dict:
         AccessToken(lk_key, lk_secret)
         .with_identity(identity)
         .with_name((body or {}).get("name") or "Site Manager")
-        .with_metadata(json.dumps({"user_id": user, "language": (body or {}).get("language", "en-IN")}))
+        .with_metadata(json.dumps({"user_id": user, "language": (body or {}).get("language", "en-IN"),
+                                  "projectId": project_id}))
         .with_grants(VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True))
     )
     return {"url": lk_url, "token": tok.to_jwt(), "room": room, "identity": identity}
@@ -270,8 +287,9 @@ async def new_session(request: Request) -> dict:
     except Exception:
         pass
     user = _user_id(request)
-    sid = dbmod.create_session(_repo, user)
-    _sessions[sid] = DialogueSession(_repo, sid, _llm)
+    repo = _project_repo(request, body.get("projectId"))
+    sid = dbmod.create_session(repo, user)
+    _sessions[sid] = DialogueSession(repo, sid, _llm)
     return {"sessionId": sid, "commandLimit": config.FREE_COMMAND_LIMIT if config.ENFORCE_FREE_COMMAND_LIMIT else None,
             "commandsUsed": dbmod.command_usage(_repo, user) if config.ENFORCE_FREE_COMMAND_LIMIT else 0}
 
@@ -321,6 +339,7 @@ async def turn(
     noise: str = Form("none"),
     decision: str = Form(None),
     language: str = Form("en-IN"),
+    projectId: str = Form(None),
     audio: UploadFile | None = None,
 ) -> dict:
     # accept JSON too (typed fallback path)
@@ -333,11 +352,12 @@ async def turn(
             noise = body.get("noise", "none")
             decision = body.get("decision")
             language = body.get("language", "en-IN")
+            projectId = body.get("projectId")
         except Exception:
             raise HTTPException(422, "sessionId required")
 
     user = _user_id(request)
-    sess = _session(sessionId, user)
+    sess = _session(sessionId, user, request, projectId)
     _reserve_or_limit(request)
     speaker = await _verify_speaker(audio, user)
     if speaker is not None:
@@ -381,7 +401,7 @@ def _speaker_locked(sess) -> bool:
 async def decide(request: Request) -> dict:
     body = await request.json()
     user = _user_id(request)
-    sess = _session(body["sessionId"], user)
+    sess = _session(body["sessionId"], user, request, body.get("projectId"))
     dec = body["decision"]
     if dec in _WRITE_DECISIONS and _speaker_locked(sess):
         raise HTTPException(403, "speaker not verified; logging locked")
@@ -389,50 +409,56 @@ async def decide(request: Request) -> dict:
 
 
 @app.get("/api/conversations")
-async def conversations(request: Request) -> dict:
+async def conversations(request: Request, projectId: str = config.PROJECT_ID) -> dict:
     user = _user_id(request)
-    sessions = dbmod.sessions_for_user(_repo, user)
+    repo = _project_repo(request, projectId)
+    sessions = dbmod.sessions_for_user(repo, user)
     for session in sessions:
-        session["turns"] = dbmod.turns_for_session(_repo, session["session_id"])
+        session["turns"] = dbmod.turns_for_session(repo, session["session_id"])
     return {"sessions": sessions, "commandLimit": config.FREE_COMMAND_LIMIT if config.ENFORCE_FREE_COMMAND_LIMIT else None,
             "commandsUsed": dbmod.command_usage(_repo, user) if config.ENFORCE_FREE_COMMAND_LIMIT else 0}
 
 
 # ---------------------------------------------------------------- observations
 @app.get("/api/observations")
-def observations(request: Request) -> list[dict]:
+def observations(request: Request, projectId: str = config.PROJECT_ID) -> list[dict]:
     _user_id(request)
-    rows = _repo._all(
+    repo = _project_repo(request, projectId)
+    rows = repo._all(
         "SELECT observation_id, created_at, location_id, element, attribute, value_claimed, unit, "
         "drawing_id, revision_claimed, contradiction_flag, contradiction_kinds, final_decision, linked_rfi_id "
-        "FROM field_observations WHERE project_id = ? ORDER BY created_at DESC", (config.PROJECT_ID,))
+        "FROM field_observations WHERE project_id = ? ORDER BY created_at DESC", (repo.project_id,))
     for r in rows:
         r["contradiction_kinds"] = json.loads(r["contradiction_kinds"]) if r.get("contradiction_kinds") else []
     return rows
 
 
 @app.get("/api/observations/{obs_id}")
-def observation(request: Request, obs_id: str) -> dict:
+def observation(request: Request, obs_id: str, projectId: str = config.PROJECT_ID) -> dict:
     _user_id(request)
-    row = _repo._one("SELECT * FROM field_observations WHERE observation_id = ?", (obs_id,))
+    repo = _project_repo(request, projectId)
+    row = repo._one("SELECT * FROM field_observations WHERE project_id = ? AND observation_id = ?",
+                    (repo.project_id, obs_id))
     if not row:
         raise HTTPException(404, "not found")
     row["contradiction_kinds"] = json.loads(row["contradiction_kinds"]) if row.get("contradiction_kinds") else []
     evidence: dict[str, Any] = {}
     if row.get("drawing_id"):
-        evidence["drawing"] = _repo.drawing_by_id(row["drawing_id"])
+        evidence["drawing"] = repo.drawing_by_id(row["drawing_id"])
     if row.get("linked_rfi_id"):
-        evidence["rfi"] = _repo._one("SELECT * FROM rfis WHERE rfi_id = ?", (row["linked_rfi_id"],))
+        evidence["rfi"] = repo._one("SELECT * FROM rfis WHERE project_id = ? AND rfi_id = ?",
+                                    (repo.project_id, row["linked_rfi_id"]))
     row["evidence"] = evidence
     return row
 
 
 # ---------------------------------------------------------------- scenarios
 @app.get("/api/scenarios")
-def scenarios() -> list[dict]:
+def scenarios(request: Request, projectId: str = config.PROJECT_ID) -> list[dict]:
     try:
         from scenarios import load_scenarios
-        return [{"id": s["id"], "title": s["title"]} for s in load_scenarios()]
+        repo = _project_repo(request, projectId)
+        return [{"id": s["id"], "title": s["title"]} for s in load_scenarios(repo.project_id)]
     except Exception:
         return []
 
@@ -445,7 +471,8 @@ async def scenarios_run(request: Request) -> dict:
         body = {}
     try:
         from scenarios import run_all
-        return run_all(body.get("ids"))
+        repo = _project_repo(request, body.get("projectId"))
+        return run_all(body.get("ids"), project_id=repo.project_id)
     except Exception as e:
         raise HTTPException(501, f"scenario runner not ready: {e}")
 
@@ -492,22 +519,24 @@ async def tts(request: Request):
 
 # ---------------------------------------------------------------- Memory (thin)
 @app.get("/api/drawings")
-def drawings(request: Request) -> list[dict]:
+def drawings(request: Request, projectId: str = config.PROJECT_ID) -> list[dict]:
     _user_id(request)
-    return _repo._all("SELECT * FROM drawings WHERE project_id = ? ORDER BY drawing_number, rev_ordinal",
-                      (config.PROJECT_ID,))
+    repo = _project_repo(request, projectId)
+    return repo._all("SELECT * FROM drawings WHERE project_id = ? ORDER BY drawing_number, rev_ordinal",
+                     (repo.project_id,))
 
 
 @app.get("/api/rfis")
-def rfis(request: Request) -> list[dict]:
+def rfis(request: Request, projectId: str = config.PROJECT_ID) -> list[dict]:
     _user_id(request)
-    return _repo._all("SELECT * FROM rfis WHERE project_id = ? ORDER BY rfi_id", (config.PROJECT_ID,))
+    repo = _project_repo(request, projectId)
+    return repo._all("SELECT * FROM rfis WHERE project_id = ? ORDER BY rfi_id", (repo.project_id,))
 
 
 @app.get("/api/permits")
-def permits(request: Request) -> list[dict]:
+def permits(request: Request, projectId: str = config.PROJECT_ID) -> list[dict]:
     _user_id(request)
-    return _repo.permits_with_checks()
+    return _project_repo(request, projectId).permits_with_checks()
 
 
 # ---------------------------------------------------------------- v2 routers
