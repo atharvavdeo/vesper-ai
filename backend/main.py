@@ -545,7 +545,7 @@ def permits(request: Request, projectId: str = config.PROJECT_ID) -> list[dict]:
 import importlib as _importlib
 
 V2_ROUTERS: dict[str, str] = {}
-for _mod in ("routes.memory", "routes.ingest", "routes.tenancy"):
+for _mod in ("routes.memory", "routes.ingest", "routes.tenancy", "routes.tools"):
     try:
         app.include_router(_importlib.import_module(_mod).router)
         V2_ROUTERS[_mod] = "ok"
