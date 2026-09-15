@@ -11,3 +11,15 @@ __pycache__/
 voiceid/models/
 .next-static/
 out/
+
+# v2 generated stores (rebuild locally; see data/DATA.md)
+data/app.db
+data/app.db-*
+data/memory/
+data/site.db.bak-*
+data/raw/sections/*/
+data/raw/sections/_nohup.txt
+data/raw/sections/_crawl_log.txt
+data/raw/sections/_sitemap.xml
+backend/.venv-cognee/
+**/.venv-cognee/

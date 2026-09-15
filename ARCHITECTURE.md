@@ -212,3 +212,70 @@ flowchart LR
 The web service, agent worker and VoiceID sidecar intentionally deploy separately: a frontend
 release cannot restart an active voice worker, and a LiveKit reconnect does not weaken the
 HTTP chat fallback or the deterministic data store.
+
+## 6. v2: memory layer, tenancy and onboarding
+
+v2 adds three things around the unchanged deterministic engine: a local memory layer for
+knowledge questions, multi-tenant onboarding, and a laptop dashboard. The safety invariant is
+unchanged — drawing facts, revisions, permits and hold points are still decided by the engine
+over `site.db`; memory answers knowledge questions with citations and never authorises a log.
+
+```mermaid
+flowchart LR
+  classDef client fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+  classDef service fill:#ecfdf5,stroke:#059669,color:#064e3b
+  classDef store fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+  classDef external fill:#faf5ff,stroke:#7e22ce,color:#581c87
+
+  Dash["/app dashboard<br/>Overview · Live · Ask · Memory · Documents · tables"]:::client
+  Onb["/onboarding<br/>Clerk org → org profile → 12-step project wizard"]:::client
+  Ingest["IngestPanel<br/>upload · paste text · speak"]:::client
+
+  subgraph API["FastAPI :8000"]
+    Ten["routes/tenancy.py<br/>/api/me · orgs · projects · invites · overview"]:::service
+    MemR["routes/memory.py<br/>/api/memory/search · ask · stats · graph · documents"]:::service
+    IngR["routes/ingest.py<br/>/api/ingest/file · text · voice · jobs"]:::service
+    Ret["memory/retrieve.py<br/>rewrite → vector ‖ BM25 → RRF k=60 → rerank → abstain"]:::service
+    Ans["memory/answer.py<br/>grounded answer + citations"]:::service
+    Emails["emails/send.py"]:::service
+  end
+
+  AppDB[("data/app.db<br/>tenancy · documents · chunks · FTS5 · jobs")]:::store
+  Lance[("data/memory/lancedb<br/>bge-m3 vectors")]:::store
+  Cognee[("Cognee graph<br/>Kuzu · data/memory/cognee")]:::store
+  Ollama["Ollama bge-m3<br/>(local embeddings)"]:::external
+  Rerank["bge-reranker-v2-m3<br/>(local cross-encoder)"]:::external
+  Groq["Groq gpt-oss-120b → Cerebras"]:::external
+  Sarvam["Sarvam saaras:v3"]:::external
+  Resend["Resend"]:::external
+
+  Onb --> Ten --> AppDB
+  Ten -->|"ingest_project_profile"| IngR
+  Ten --> Emails --> Resend
+  Dash --> MemR --> Ret
+  Ret --> Lance
+  Ret --> AppDB
+  Ret --> Cognee
+  Ret --> Ollama
+  Ret --> Rerank
+  MemR --> Ans --> Groq
+  Ingest --> IngR
+  IngR -->|"voice notes"| Sarvam
+  IngR --> Ollama
+  IngR --> Lance
+  IngR --> AppDB
+  IngR -. "background graph" .-> Cognee
+```
+
+| Concern | Decision |
+| --- | --- |
+| Tenancy | Clerk Organization = client company; projects belong to an org. `tenancy/auth.py` reads org claims from Clerk session token v2 (`o.id`, `o.rol`) or v1; local dev uses `X-Vesper-User` / `X-Vesper-Org`. The seeded P1 project is read-only for everyone. |
+| Isolation | Every chunk carries `scope, org_id, project_id, dataset`. A project search reads its own dataset plus the global `kb_*` datasets only. |
+| Retrieval | bd-agent-style hybrid search (`docs/plan/research/02-bd-agent-rag.md`): LanceDB vectors and SQLite FTS5 BM25 run in parallel, fused with RRF (k=60), reranked by a cross-encoder, then an abstain threshold. Exact IDs (RFI-050, C-4, IS 456 Cl. 26.4) are why BM25 is kept. Responses carry `timingsMs` per leg. |
+| Answering | Groq `gpt-oss-120b` (Cerebras fallback) answers only from retrieved context, quotes numbers verbatim, cites clause/template/drawing, and returns the exact abstain line when nothing relevant was found. |
+| Ingestion | Heading-aware chunks, whole-table chunks for price/SOR/rate tables, SHA-256 dedup, stable chunk ids. Small uploads are searchable in seconds; Cognee graph extraction runs in the background. |
+| Voice | Live STT is Sarvam `saaras:v3-realtime` (Groq Whisper fallback) followed by a conservative site-vocabulary normaliser (`agent/stt_normalize.py`). The agent can call `search_memory` for knowledge questions the record doesn't answer. |
+| Ask is read-only | The dashboard's Ask page calls only `/api/memory/*`; it never falls back to `/api/turn`, which captures and logs observations. |
+
+Detailed design and per-workstream reports: `docs/plan/PLAN.md`, `docs/plan/PROGRESS.md`,
+`docs/plan/reports/`.

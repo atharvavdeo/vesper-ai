@@ -7,12 +7,29 @@ Two ways to show it:
 
 | | What | Needs |
 | --- | --- | --- |
-| **Recorded demo** | [vesper-ai.pages.dev/demo](https://vesper-ai.pages.dev/demo/) (or `/demo` locally): the full console on recorded engine output, with pre-rendered Rime audio and a guided tour | Nothing. No sign-in, no keys, nothing is written. |
-| **Live demo** | `/app` — real voice over LiveKit, Rime speech, speaker-ID gate | Backend, agent, voiceid, keys (see README §5) |
+| **Recorded dashboard** | [vesper-ai.pages.dev/app](https://vesper-ai.pages.dev/app/): the laptop dashboard — Overview, Ask memory playing real recorded questions one by one, Memory layer, Documents & ingest, site tables, Scenarios, onboarding with **Prefill sample site** — plus the Driver.js tour | Nothing. No sign-in, no keys, nothing is written. |
+| **Recorded voice console** | [vesper-ai.pages.dev/demo](https://vesper-ai.pages.dev/demo/) (or `/demo` locally): the phone console on recorded engine output, with pre-rendered Rime audio and its guided tour | Nothing. |
+| **Live product** | `/app` — Clerk sign-in, onboarding, live voice over LiveKit (Sarvam STT, Rime speech), memory layer, speaker-ID gate | Backend, agent, voiceid, Ollama, keys (see README) |
 
-Every reply in the recorded demo is **real engine output**: `scripts/build_demo_data.py` runs the
-conversations below through `backend/engine` against a copy of `data/site.db`. Re-run it after
-changing the engine or the seed so the demo never drifts from the product.
+Every reply in the recorded demos is **real product output**: `scripts/build_demo_data.py` runs the
+conversations below through `backend/engine` against a copy of `data/site.db`, and
+`scripts/build_dashboard_demo.py` records `/api/memory/ask` and `/search` answers from a running
+backend. Re-run both after changing the engine, memory or seed so the demo never drifts.
+
+### Dashboard script (~2 minutes)
+
+1. **Overview** — KPIs, permit and hold-point blockers, recent activity. The tour starts on first visit.
+2. **Ask memory** — questions play in one by one: IS 456 column cover (Cl. 26.4), L4 pre-pour checks,
+   chiller commissioning checklist (template FMT-MEP-002), curing period, C-401 R2 changes, a Hinglish
+   question, and "today's gold price" → an explicit **abstain**. Open **Inspect retrieval** to show
+   vector / BM25 / fusion / rerank scores and per-leg latency.
+3. **Memory layer** — models strip (bge-m3, reranker, gpt-oss-120b, LanceDB, Kuzu), corpora sizes,
+   knowledge graph, search playground.
+4. **Documents & ingest** — upload, paste text or speak; job progress runs queued → parsing →
+   embedding → graph → done.
+5. **Onboarding** — `/onboarding/project` → **Prefill sample site** (Nashik 300-bed hospital or the
+   Ghaghara river bridge) → Review → Create project → project memory indexing.
+6. **Scenarios** — Run suite → 10/10, 0 wrong logs.
 
 <p align="center">
   <img src="docs/media/screens/landing-hero.jpg" width="880" alt="Vesper landing page hero"/>
