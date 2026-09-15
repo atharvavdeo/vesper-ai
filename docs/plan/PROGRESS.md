@@ -17,7 +17,7 @@ Last updated: 2026-09-15
 | W5 | Sarvam saaras:v3 STT, name/ID normaliser, Groq primary LLM, stronger prompts | 🟡 mostly done | Sarvam `saaras:v3-realtime` live in agent (Whisper fallback), `/api/stt` on Sarvam REST, normaliser, Groq primary, stronger prompts, `search_memory` tool; regex crash fixed; worker running. Remaining: P11 latency re-run, P12 report |
 | W6 | Crawl remaining InfraLens sections (IS code, prices, steel, SOR, rate analysis, handbook, terms) | ✅ done ([report](reports/W6.md)) | 0 parse errors, 326 MB; many code pages are thin stubs (W1 filters/weights); `projects` (151) and `boq` (59) not crawled yet. 6,690 pages cached + parsed: code 4,391 · prices 869 · term 394 · steel 220 · thumbrules 151 · knowledge 120 · sor 118 · rate-analysis 118 · handbook 98 · dcr 78 · gate 76 · cpheeo 48 · irc 9. 762 inventory URLs were 404 on the site. Docs being finalised |
 | W7 | Integration: all services, eval, 10/10 scenarios, browser check light+dark | 🟡 in progress (main) | Onboarding E2E, Ask memory, dashboard pages verified; static demo built; deploy pending (P9) |
-| W8 | Nashik (NSK) site record + multi-project voice/engine | 🔄 running | P10 |
+| W8 | Nashik (NSK) site record + multi-project voice/engine | ✅ done ([report](reports/W8.md)) | NSK seed (21 revisions, 261 facts, 12 RFIs, 5 permits), 8/8 NSK + 10/10 P1 scenarios, projectId through API/voice/dashboard, memory eval recall@8 1.000, no scope leaks |
 
 ## Findings so far
 
@@ -54,15 +54,18 @@ Last updated: 2026-09-15
 | P6 | v1 engine topic matching: IS-code question asks for a grid; "pending blockers" lists one RFI; "everything about Level 3" repeats an RFI; follow-up on an ID asks for location | Fix-1 cases in `backend/engine/answer.py`; knowledge questions go to memory; blockers/level summaries from views; add to scenarios/golden set | ✅ fixed — blockers, level summary, ID follow-up, knowledge → memory |
 | P7 | Embeddings via Ollama at 5–8 chunks/s under RAM pressure | Batched `bge-m3` via sentence-transformers on MPS in one process; re-embed ~19.6k chunks (est. 3–8 min on M3) | ❎ kept Ollama — sentence-transformers only 1.25× faster; full rebuild 15–18 min idle |
 | P8 | Golden eval + `reports/W1.md` not written | `scripts/eval_memory.py` recall@8, abstain precision, p50/p95 | ✅ done — reports/W1.md |
-| P9 | Public static demo not deployed | Re-record `scripts/build_dashboard_demo.py` after P1–P5, rebuild, verify Ask autoplay + onboarding prefill, `scripts/build_static_demo.sh deploy` | main |
-| P10 | Voice not tested end to end with memory; voice agent is P1-only (`PROJECT_ID` env) | Seed a Nashik hospital site record (drawings + revisions, facts, RFIs, permits, hold points, DPRs, observations, BOQ) into `site.db`, register it in `app.db` + memory, run the agent with that project; later pass project via LiveKit room metadata | W8 (after W1) |
+| P9 | Public static demo not deployed | Re-recorded, rebuilt, Ask autoplay verified, landing stack marquee + PDF/memory copy | ✅ deployed 2026-09-16 — vesper-ai.pages.dev |
+| P10 | Voice agent was P1-only | NSK seed + projectId in `/api/rtc/token` metadata → `Brain(project_id)` → brief/recall/log/search_memory | ✅ done — W8; live mic call still to be done by user (15 lines in reports/W8.md) |
 | P11 | Live-voice latency not re-measured after Sarvam | Re-run `scripts/voice_acceptance.py`, update RIME_EVIDENCE.md | W5 remainder |
 | P12 | W5 A/B report (`reports/W5.md`) missing | Summarise `agent/stt_eval/results.json` | W5 remainder |
-| P13 | `data/site.db` contains local test logs (e.g. OBS-000105 from the Ask fallback bug) — not committed | Rebuild clean with `python3 data/build_db.py` once W1 stops writing | main |
-| P16 | Cognee graph disabled on macOS (ladybug wheel lacks C library for migrations); separate `backend/.venv-cognee` | Graph endpoint serves document-entity graph meanwhile; fix native lib or run Cognee in Linux container | — |
+| P13 | `data/site.db` had local test logs | Rebuilt by multi-project `data/build_db.py` (P1 + NSK) | ✅ done — W8 |
+| P16 | Cognee graph disabled on macOS | Vendored Ladybug 0.19.0 C API (`data/vendor/ladybug`, gitignored, symlink `liblbug.dylib`), `MEMORY_COGNEE_ENABLED=1`; NSK smoke 60 nodes / 172 edges | ✅ local — full P1+NSK cognify running (LLM rate limits → retries) |
 | P17 | Uncached search p50 386 ms > 150 ms target (reranker on M3) | Lower `MEMORY_RERANK_HEAD` or lighter reranker | — |
 | P14 | Tenancy gaps: invite revoke / member removal, Clerk webhooks, GSTIN checksum | Planned | — |
 | P15 | Dashboard lint: 20 react-hooks errors (non-blocking) | Planned cleanup | — |
+| P18 | Relational data + vectors on Supabase | pgvector `vector(1024)` + Postgres FTS, `MEMORY_BACKEND` switch, dual-run before cutover | ⏸ later (user) — Supabase connector errors; needs `SUPABASE_*` in backend/.env.local |
+| P19 | Neo4j Aura graph copy | Optional online mirror of the Cognee graph; needs `NEO4J_URI/USERNAME/PASSWORD` (rotate the pasted credentials) | ⏸ later (user) |
+| P20 | MCP-ready agent tools | `POST /mcp` (JSON-RPC, 2025-06-18) + `GET/POST /api/tools`, 11 tools, same auth/scoping — docs/MCP.md | ✅ done 2026-09-16; public HTTPS backend + Clerk JWT needed to go live |
 
 ## Needs the user (user will supply these at the end — build everything end-to-end without waiting)
 
