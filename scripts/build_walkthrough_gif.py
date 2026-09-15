@@ -2,7 +2,7 @@
 """Build docs/media/vesper-walkthrough.gif from the captured screenshots.
 
 The GIF is a captioned walkthrough of Vesper.ai: a title card followed by
-12 annotated frames (landing page, live site memory, answers from the record,
+17 annotated frames (landing page, live site memory, answers from the record,
 drawing contradictions, decision buttons, permit blockers, audit logs, the
 scenario suite, the voiceprint gate and the guided tour).
 
@@ -65,6 +65,26 @@ STEPS = [
     ("landing-hero.jpg",
      "Site AI agents that catch errors before they're built",
      "Speak in Hinglish; every observation is checked against the latest drawings, RFIs, BOQ and permits.",
+     None),
+    ("v2-landing-stack.jpg",
+     "Built end to end on an open, local-first stack",
+     "Next.js · FastAPI · LiveKit · Sarvam · Rime · Groq/Cerebras · bge-m3 · LanceDB · Cognee · Clerk · Cloudflare.",
+     None),
+    ("v2-dash-overview.jpg",
+     "One laptop dashboard per project",
+     "Switch Pithoragarh ↔ Nashik: KPIs, blockers, drawings, RFIs, permits and Live voice all follow the project.",
+     None),
+    ("v2-ask-memory.jpg",
+     "Ask memory: cited answers or an honest no",
+     "IS codes, 550 QA/QC templates and your PDFs — every claim cites a clause, checklist or page.",
+     None),
+    ("v2-memory.jpg",
+     "Local-first memory with a knowledge graph",
+     "bge-m3 + BM25 fusion, cross-encoder rerank, per-project datasets, Cognee graph; the same tools are exposed over MCP.",
+     None),
+    ("v2-documents.jpg",
+     "Upload PDFs, paste text or speak a briefing",
+     "Drawing registers, specs, BOQs, method statements — parsed, chunked, embedded and searchable in seconds.",
      None),
     ("app-live-replay.jpg",
      "Opens with site memory, not a blank chat",
