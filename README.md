@@ -188,13 +188,15 @@ answers with Groq in ~1–3 s. Golden-set recall and abstain precision: `scripts
 | **STT** | **Sarvam** `saaras:v3-realtime` (live) / `saaras:v3` REST (uploads, Talk) → Groq Whisper `large-v3` fallback | Indian English / Hindi / Hinglish, plus `agent/stt_normalize.py` |
 | **TTS** | **Rime** `mistv3`/`cove`/`eng` over websocket (live); HTTPS via `/api/tts` (Talk) | Every spoken reply; key never reaches the browser |
 | **LLM** | Groq `openai/gpt-oss-120b` → Cerebras `gpt-oss-120b` → NVIDIA NIM | Grounded answer phrasing and slot filling only |
-| **Memory** | Ollama `bge-m3` embeddings · `bge-reranker-v2-m3` · LanceDB · SQLite FTS5 · Cognee (Kuzu graph) | Hybrid retrieval, reranking, abstention, knowledge graph |
+| **Memory** | Ollama `bge-m3` embeddings · `bge-reranker-v2-m3` · LanceDB · SQLite FTS5 · Cognee (local Ladybug graph, `data/vendor/ladybug`) | Hybrid retrieval, reranking, abstention, knowledge graph — one isolated dataset per project (`<org>__proj_<id>`) |
+| **Documents** | PyMuPDF · python-docx · openpyxl | PDF, DOCX, XLSX, CSV, text and spoken briefings → chunked, embedded, cited by page |
+| **Agent tools / MCP** | `POST /mcp` (MCP JSON-RPC) · `GET/POST /api/tools` | 11 tools over the same auth and project scoping — see [docs/MCP.md](docs/MCP.md) |
 | **Backend** | FastAPI + Uvicorn (`:8000`) | Engine, memory, ingest, tenancy, TTS/STT proxies, scenario runner |
 | **Engine** | Pure Python — `extract` · `numbers` · `answer` · `contradictions` · `dialogue` · `speech` | Rule-based, testable, no model in the decision path |
 | **Speaker ID** | SpeechBrain ECAPA-TDNN sidecar (`:8788`) | Per-account voiceprint; fails closed |
 | **Email** | Resend | Welcome, project created, invites, ingest complete |
 | **Data** | `data/site.db` (engine), `data/app.db` (tenancy + memory tables), `data/memory/` (vectors, graph) | See [data/DATA.md](data/DATA.md) |
-| **Testing** | `scenarios.py` (S01–S10) · `test_tenancy.py` · `scripts/eval_memory.py` · `scripts/voice_acceptance.py` · Vitest | |
+| **Testing** | `scenarios.py` (P1 S01–S10, `--project NSK` N01–N08) · `test_multi_project.py` · `test_tenancy.py` · `scripts/eval_memory.py` · `scripts/voice_acceptance.py` · Vitest | |
 
 Full request, identity, voice, memory, tenancy and deployment flows: [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -289,11 +291,18 @@ scripts/              demo builders, ingest, evaluations, voice acceptance, stat
 ```
 </details>
 
-### Seeded demonstration project
+### Seeded demonstration projects
 
 `P1` is a **synthetic Pithoragarh District Hospital & Staff Quarters** project for repeatable safety testing:
 OPD/maternity columns E-1/E-2, the RW-1 retaining wall, revisioned drawings, RFIs, monsoon DPRs, permits,
-hold points and observations. It is read-only for every account. Never treat seeded measurements as real
+hold points and observations.
+
+`NSK` is a **synthetic Nashik Civil Hospital 300-bed Super Speciality Block**: 29 locations, 21 drawing
+revisions, 261 facts, 12 RFIs, 8 submittals, 7 DPRs, 5 permits (hot-work and excavation blockers), an L3 OT slab
+hold point, stakeholders and 8 Hinglish scenarios. Pick the project in the dashboard; Live voice, memory and the
+MCP tools follow it. Spoken test lines: [docs/plan/reports/W8.md](docs/plan/reports/W8.md).
+
+Both are read-only for every account. Never treat seeded measurements as real
 approvals — production projects must onboard and ingest their own approved drawings, RFIs, permits and records.
 
 ---
@@ -312,8 +321,9 @@ revision** and stops you *before* a wrong number becomes a record.
 <td width="50%" valign="top">
 
 ### 🧠 Memory with receipts
-IS codes, 550 QA/QC templates, prices and your own documents — every answer cites its clause or template,
-or Vesper says it isn't in the record.
+IS codes, 550 QA/QC templates, prices and your own **PDFs, Word and Excel files** — each project gets its own
+memory, every answer cites its clause, template or page, or Vesper says it isn't in the record. The same memory
+is exposed to other agents as **MCP tools** ([docs/MCP.md](docs/MCP.md)).
 
 </td>
 </tr>
