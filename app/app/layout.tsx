@@ -50,18 +50,28 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+// Theme (docs/plan/PLAN.md §6): resolve the saved choice ("light" | "dark" | "system") before
+// first paint so the dashboard never flashes. Only surfaces that opt into the design tokens
+// (.vs-theme) change; the landing page, /demo and auth stay dark.
+const THEME_SCRIPT = `(function(){var d=document.documentElement;try{var p=localStorage.getItem("vesper-theme");if(p!=="light"&&p!=="dark")p="system";var t=p==="system"?(matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"):p;d.setAttribute("data-theme",t);d.setAttribute("data-theme-pref",p)}catch(e){d.setAttribute("data-theme","dark")}})()`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
+      data-theme="dark"
+      suppressHydrationWarning
       className={`${inter.variable} ${instrumentSerif.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
         <meta name="theme-color" content="#000000" />
         <meta name="color-scheme" content="dark" />
       </head>
       <body className="min-h-full flex flex-col bg-black text-white selection:bg-white/20 selection:text-white">
-        <ClerkProvider>
+        {/* The Clerk instance forces an organization; send that session task to our own onboarding
+            step instead of Clerk's hosted page. */}
+        <ClerkProvider taskUrls={{ "choose-organization": "/onboarding/org" }}>
           {children}
         </ClerkProvider>
       </body>
