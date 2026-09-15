@@ -8,7 +8,7 @@ Build data/site.db from scratch (drop + rebuild; idempotent; offline once data/r
 Inputs:
   data/schema.sql                      shared contract
   data/raw/*.json + data/raw/html/*    Firecrawl cache written by data/scraper/scrape_infralens.py
-  data/seed/seed_p1.py                 demo project P1 (mirrored to data/seed/project_p1.json)
+  data/seed/project_*.json             demo project records (P1 is regenerated from seed_p1.py)
 """
 from __future__ import annotations
 
@@ -227,14 +227,13 @@ def ensure_template(con, tid, title, ttype, family, family_code, source):
 # ================================================================================================
 # 2. Seed
 # ================================================================================================
-def load_seed(con: sqlite3.Connection) -> dict:
-    S = seed_p1.build_seed()
-    (DATA / "seed" / "project_p1.json").write_text(json.dumps(S, ensure_ascii=False, indent=1))
+def load_project_seed(con: sqlite3.Connection, S: dict) -> dict:
     P = S["project"]
+    pid = P["project_id"]
     con.execute("INSERT INTO projects VALUES (:project_id,:name,:client,:location,:contract_type,:start_date)", P)
     for l in S["locations"]:
         con.execute("INSERT INTO locations VALUES (?,?,?,?,?,?)",
-                    (l["location_id"], "P1", l["grid"], l["level"], l["zone"], json.dumps(l["aliases"], ensure_ascii=False)))
+                    (l["location_id"], pid, l["grid"], l["level"], l["zone"], json.dumps(l["aliases"], ensure_ascii=False)))
 
     for tid, title, ttype, fam, fc, src in [
         ("FMT-TND-005", "BOQ Format (CPWD)", "Form", "Tendering & Contracts", "TND", "formats"),
@@ -248,7 +247,7 @@ def load_seed(con: sqlite3.Connection) -> dict:
     for b in S["boq_items"]:
         con.execute("INSERT INTO boq_items VALUES (:boq_id,:project_id,:item_code,:description,:unit,:qty_tendered,"
                     ":rate,:amount,:spec_ref,:template_id)", b)
-        add_chunk(con, "boq", b["boq_id"], "P1",
+        add_chunk(con, "boq", b["boq_id"], pid,
                   f"BOQ item {b['item_code']} (CPWD DSR) — {b['description']}. Unit {b['unit']}, tendered qty "
                   f"{b['qty_tendered']:g}, rate ₹{b['rate']:g}/{b['unit']}, amount ₹{b['amount']:,.0f}. Spec: {b['spec_ref']}.")
 
@@ -263,9 +262,10 @@ def load_seed(con: sqlite3.Connection) -> dict:
         facts_by_dwg.setdefault(f["drawing_id"], []).append(f)
 
     for r in S["rfis"]:
-        con.execute("INSERT INTO rfis VALUES (:rfi_id,'P1',:subject,:location_id,:drawing_ref,:spec_ref,:question,"
-                    ":response,:status,:raised_on,:answered_on,:impact,:resulting_drawing_id,'PMC-DSN-LOG-003')", r)
-        add_chunk(con, "rfi", r["rfi_id"], "P1",
+        con.execute("INSERT INTO rfis VALUES (:rfi_id,:project_id,:subject,:location_id,:drawing_ref,:spec_ref,:question,"
+                    ":response,:status,:raised_on,:answered_on,:impact,:resulting_drawing_id,'PMC-DSN-LOG-003')",
+                    {**r, "project_id": pid})
+        add_chunk(con, "rfi", r["rfi_id"], pid,
                   f"{r['rfi_id']} [{r['status']}] {r['subject']}. Location {r['location_id']}, drawing {r['drawing_ref']}. "
                   f"Raised {r['raised_on']}" + (f", answered {r['answered_on']}" if r["answered_on"] else "") + ". "
                   f"Q: {r['question']} " + (f"A: {r['response']} " if r["response"] else "") +
@@ -288,25 +288,26 @@ def load_seed(con: sqlite3.Connection) -> dict:
             lines.append(f"- {f['location_id']} {f['element']} {f['element_mark']}: {f['attribute']} = {v} {f['unit'] or ''}"
                          + (f" (±{f['tolerance']:g})" if f["tolerance"] else "") + (f" [{f['code_ref']}]" if f["code_ref"] else ""))
         for c in chunks_of("\n".join(lines)):
-            add_chunk(con, "drawing", d["drawing_id"], "P1", c, drawing_number=d["drawing_number"], revision=d["revision"])
+            add_chunk(con, "drawing", d["drawing_id"], pid, c, drawing_number=d["drawing_number"], revision=d["revision"])
 
     for s in S["submittals"]:
         tid = s["template_hint"] if template_exists(con, s["template_hint"]) else None
         con.execute("INSERT INTO submittals VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (s["submittal_id"], "P1", s["type"], s["material"], s["spec_section"], s["status"],
+                    (s["submittal_id"], pid, s["type"], s["material"], s["spec_section"], s["status"],
                      s["reviewer_comments"], s["submitted_on"], s["reviewed_on"], tid))
-        add_chunk(con, "submittal", s["submittal_id"], "P1",
+        add_chunk(con, "submittal", s["submittal_id"], pid,
                   f"SUBMITTAL {s['submittal_id']} [{s['status']}] {s['type']}: {s['material']}. Spec {s['spec_section']}. "
                   f"Submitted {s['submitted_on']}" + (f", reviewed {s['reviewed_on']}" if s["reviewed_on"] else "") +
                   f". Comments: {s['reviewer_comments']}", clause=s["spec_section"])
 
     for d in S["daily_logs"]:
-        lid = f"DPR-{d['log_date']}"
+        # Preserve the established P1 identifiers; prefix additional projects to avoid PK collisions.
+        lid = f"DPR-{d['log_date']}" if pid == "P1" else f"DPR-{pid}-{d['log_date']}"
         con.execute("INSERT INTO daily_logs VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (lid, "P1", d["log_date"], d["weather"], json.dumps(d["manpower"]), d["work_done"],
+                    (lid, pid, d["log_date"], d["weather"], json.dumps(d["manpower"]), d["work_done"],
                      json.dumps(d["materials"], ensure_ascii=False), json.dumps(d["equipment"]), d["safety"], "FMT-SIT-016"))
-        add_chunk(con, "dpr", lid, "P1",
-                  f"DPR {d['log_date']} (Tower B P1). Weather: {d['weather']}. Manpower: "
+        add_chunk(con, "dpr", lid, pid,
+                  f"DPR {d['log_date']} ({pid}). Weather: {d['weather']}. Manpower: "
                   + ", ".join(f"{k} {v}" for k, v in d["manpower"].items()) + f" (total {sum(d['manpower'].values())}). "
                   f"Work done: {d['work_done']} Materials: " + ", ".join(f"{k} {v}" for k, v in d["materials"].items())
                   + f". Safety: {d['safety']}")
@@ -318,7 +319,7 @@ def load_seed(con: sqlite3.Connection) -> dict:
                     if con.execute("SELECT COUNT(*) FROM template_fields WHERE template_id=? AND field_kind='check_item'",
                                    (t,)).fetchone()[0]), None) or next((t for t in p["template_pref"] if template_exists(con, t)), None)
         con.execute("INSERT INTO permits VALUES (?,?,?,?,?,?,?,?,?)",
-                    (p["permit_id"], "P1", p["permit_type"], p["location_id"], p["valid_from"], p["valid_to"],
+                    (p["permit_id"], pid, p["permit_type"], p["location_id"], p["valid_from"], p["valid_to"],
                      p["status"], p["issued_by"], tid))
         rows = con.execute("SELECT field_id, label, is_mandatory, is_hold_point, acceptance FROM template_fields "
                            "WHERE template_id=? AND field_kind='check_item' AND section NOT IN ('Header','Details','Sign-off') "
@@ -337,7 +338,7 @@ def load_seed(con: sqlite3.Connection) -> dict:
                          p["issued_by"].split(" (")[0] if sat else None,
                          (p["valid_from"] + ":00+05:30") if sat else None))
         permit_stats[p["permit_id"]] = (tid, len(rows), unsat)
-        add_chunk(con, "permit", p["permit_id"], "P1",
+        add_chunk(con, "permit", p["permit_id"], pid,
                   f"PERMIT {p['permit_id']} ({p['permit_type']}) at {p['location_id']} — status {p['status']}, valid "
                   f"{p['valid_from']} to {p['valid_to']}, issued by {p['issued_by']}. Template {tid}. "
                   f"{len(rows)} checks; UNSATISFIED: {'; '.join(unsat) if unsat else 'none'}."
@@ -346,7 +347,7 @@ def load_seed(con: sqlite3.Connection) -> dict:
     # checklist instances
     for c in S["checklists"]:
         con.execute("INSERT INTO checklist_instances VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (c["instance_id"], "P1", c["template_id"], c["location_id"], c["element"], c["element_mark"],
+                    (c["instance_id"], pid, c["template_id"], c["location_id"], c["element"], c["element_mark"],
                      c["drawing_id"], c["planned_activity"], c["planned_for"], c["status"], c["hold_point_released"],
                      c["inspected_by"], c["inspected_on"],
                      c["inspected_by"] if c["hold_point_released"] else None,
@@ -370,7 +371,7 @@ def load_seed(con: sqlite3.Connection) -> dict:
             con.execute("INSERT INTO checklist_items VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                         (c["instance_id"], fid, ref, sec, label, mand, hold, status, remarks,
                          c["inspected_by"].split(" (")[0], c["inspected_on"]))
-        add_chunk(con, "checklist", c["instance_id"], "P1",
+        add_chunk(con, "checklist", c["instance_id"], pid,
                   f"CHECKLIST {c['instance_id']} ({c['template_id']} Pre-Pour Inspection) for {c['location_id']} "
                   f"{c['element']} {c['element_mark']} per {c['drawing_id']}. Planned {c['planned_activity']} on "
                   f"{c['planned_for']}. Status {c['status']}; hold point released: "
@@ -384,8 +385,26 @@ def load_seed(con: sqlite3.Connection) -> dict:
                     [o[k] for k in cols])
 
     for clause, text in S["code_clauses"]:
-        add_chunk(con, "code_clause", clause, None, text, clause=clause)
+        # P1 keeps its legacy global-looking doc_ref. Other site-specific notes must stay scoped.
+        add_chunk(con, "code_clause", clause if pid == "P1" else f"{pid}:{clause}",
+                  None if pid == "P1" else pid, text, clause=clause)
     return {"permits": permit_stats}
+
+
+def load_seeds(con: sqlite3.Connection) -> dict[str, dict]:
+    """Regenerate canonical P1, then load every project seed through the same path."""
+    p1_path = DATA / "seed" / "project_p1.json"
+    p1_path.write_text(json.dumps(seed_p1.build_seed(), ensure_ascii=False, indent=1))
+    stats: dict[str, dict] = {}
+    for path in sorted((DATA / "seed").glob("project_*.json")):
+        seed = json.loads(path.read_text())
+        pid = str((seed.get("project") or {}).get("project_id") or "").strip()
+        if not pid:
+            raise ValueError(f"{path.name}: missing project.project_id")
+        if pid in stats:
+            raise ValueError(f"duplicate project_id {pid} in {path.name}")
+        stats[pid] = load_project_seed(con, seed)
+    return stats
 
 
 # ================================================================================================
@@ -398,9 +417,16 @@ def sanity(con) -> list[str]:
           "AND element='column' AND attribute='rebar_spacing'")
     if r != [(180.0, "mm", "A-102@R4", "RFI-047")]:
         errs.append(f"v_current_facts C-5 spacing unexpected: {r}")
-    for num, in q("SELECT drawing_number FROM drawings WHERE status='For Construction' GROUP BY drawing_number "
+    for _, num in q("SELECT project_id, drawing_number FROM drawings WHERE status='For Construction' GROUP BY project_id, drawing_number "
                   "HAVING SUM(is_latest)<>1"):
         errs.append(f"drawing {num}: is_latest not exactly once")
+    if not q("SELECT 1 FROM v_current_facts WHERE project_id='NSK' AND location_id='NSK:C-7:L3' "
+             "AND drawing_id='SSB-STR-L3-201@R2' AND attribute='cover' AND value_num=40"):
+        errs.append("NSK C-7 L3 latest cover fact missing")
+    if not q("SELECT 1 FROM v_permit_blockers WHERE permit_id='HWP-2031' AND lower(check_label) LIKE '%fire watch%'"):
+        errs.append("NSK HWP-2031 has no unsatisfied fire-watch check")
+    if not q("SELECT 1 FROM v_open_hold_points WHERE location_id='NSK:Slab:L3' AND instance_id='CL-PP-SSB-L3-001'"):
+        errs.append("NSK L3 slab pre-pour hold point not present")
     if not q("SELECT 1 FROM v_permit_blockers WHERE permit_id='HWP-0112' AND lower(check_label) LIKE '%fire watch%'"):
         errs.append("HWP-0112 has no unsatisfied fire-watch check")
     if not q("SELECT 1 FROM v_open_hold_points WHERE location_id='P1:Slab:L4' AND template_id='QC-CON-CHK-001'"):
@@ -439,7 +465,7 @@ def main():
     con.execute("PRAGMA foreign_keys=OFF")  # bulk load (self-referencing drawings); verified by foreign_key_check
     with con:
         tstats = load_templates(con)
-        sstats = load_seed(con)
+        sstats = load_seeds(con)
     con.execute("PRAGMA foreign_keys=ON")
     con.execute("INSERT INTO doc_chunks_fts(doc_chunks_fts) VALUES ('optimize')")
     con.commit()
@@ -456,8 +482,9 @@ def main():
               "rfis", "submittals", "daily_logs", "permits", "permit_checks", "checklist_instances", "checklist_items",
               "field_observations", "doc_chunks"):
         log(f"  {t:20s} {con.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]}")
-    for pid, (tid, n, unsat) in sstats["permits"].items():
-        log(f"  permit {pid}: template={tid} checks={n} unsatisfied={unsat}")
+    for project_id, project_stats in sstats.items():
+        for permit_id, (tid, n, unsat) in project_stats["permits"].items():
+            log(f"  permit {project_id}/{permit_id}: template={tid} checks={n} unsatisfied={unsat}")
     errs = sanity(con)
     con.execute("PRAGMA journal_mode=DELETE")  # single-file db for the app
     con.close()
