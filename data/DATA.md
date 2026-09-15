@@ -25,19 +25,34 @@ permit-blocker summary as it goes.
 No network needed. The scraper (`data/scraper/scrape_infralens.py`, Firecrawl) only
 refreshes `raw/`; rotate the Firecrawl key after the hackathon.
 
-## Row counts (current build)
+## Row counts (current build, 2026-09-15)
+
+All 550 template pages are now cached (the Firecrawl run stopped at ~297; the rest were fetched
+with `scrape_infralens.py --http-only`), so every template has its full field list.
 
 | table | rows | | table | rows |
 |---|---:|---|---|---:|
-| projects | 1 | | templates | 550 |
-| locations | 28 | | template_fields | 7675 |
-| drawings | 14 | | template_sources | 3 |
-| drawing_facts | 564 | | checklist_instances | 2 |
-| rfis | 10 | | checklist_items | 124 |
-| submittals | 8 | | doc_chunks | 3551 |
-| permits | 4 | | daily_logs | 5 |
+| projects | 1 | | templates | 550 (all with fields) |
+| locations | 32 | | template_fields | 19,133 |
+| drawings | 18 | | template_sources | 3 |
+| drawing_facts | 576 | | template_codes | 1,341 |
+| rfis | 13 | | checklist_items | 124 |
+| submittals | 8 | | doc_chunks | 6,947 |
+| permits | 5 | | daily_logs | 7 |
 | permit_checks | 79 | | boq_items | 26 |
-| field_observations | 2 (seed) | | voice_sessions / voice_turns | 0 |
+
+## Beyond `site.db` (v2)
+
+| Store | What | Built by |
+| --- | --- | --- |
+| `data/raw/sections/<section>/*.json` | 6,690 crawled infralens.in pages, parsed to text + structured fields: IS code 4,391 · prices 869 · glossary 394 · steel 220 · thumb rules 151 · knowledge 120 · SOR 118 · rate analysis 118 · handbook 98 · DCR 78 · GATE 76 · CPHEEO 48 · IRC 9 | `data/scraper/crawl_sections.py` (resumable; `--offline` coverage, `--reparse` rebuilds JSON from cached HTML). Formats: `docs/plan/research/05-infralens-sections.md` |
+| `data/onboarding_schema.json` | Org (3 steps) + project (12 steps, 92 fields) onboarding schema — the single source of truth for the wizard and backend validation | hand-authored (W2) |
+| `data/app.db` | Tenancy (orgs, members, projects, invites, activity, email log) and memory tables (documents, chunks, `chunks_fts` FTS5, ingest_jobs) | `data/app_schema.sql` + `backend/memory/schema.sql`, created by `backend/tenancy/appdb.py` |
+| `data/memory/` | LanceDB vectors, Cognee system/graph dirs, embedding cache, ingest logs | `scripts/ingest_knowledge.py`, upload/text/voice ingest |
+
+Memory datasets: `kb_templates`, `kb_is_codes`, `kb_prices_sor`, `kb_handbook` (global) and
+`org_<orgId>__proj_<projectId>` per project. A project's search sees only its own dataset plus
+the global ones.
 
 Templates by `source_id`: **formats 100 · qaqc 300 · pmc 150** ✓ (target 100 / 300 / 150)
 
