@@ -23,3 +23,7 @@ data/raw/sections/_crawl_log.txt
 data/raw/sections/_sitemap.xml
 backend/.venv-cognee/
 **/.venv-cognee/
+# Added by code-review-graph
+.code-review-graph/
+data/vendor/
+data/app.db.bak-*
