@@ -38,7 +38,25 @@ export default function AskMemory() {
 
   const [threads, setThreads] = useState<Thread[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [histOpen, setHistOpen] = useState(true);
   const storeKey = `vesper_ask_threads_${project.id}`;
+
+  useEffect(() => {
+    try {
+      setHistOpen(localStorage.getItem("vesper_ask_history_open") !== "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleHist = (open: boolean) => {
+    setHistOpen(open);
+    try {
+      localStorage.setItem("vesper_ask_history_open", open ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
 
   const writeThreads = (next: Thread[]) => {
     setThreads(next);
@@ -224,10 +242,14 @@ export default function AskMemory() {
         title="Ask memory"
         description="Grounded answers over project documents, IS codes, templates and the site record — every claim cited, or an explicit abstain."
         actions={
+          // Above xl the floating history panel carries its own "New" button and would sit on top
+          // of this one, so only show it at widths where the panel is hidden.
           msgs.length ? (
-            <button className="dash-btn dash-btn-sm" onClick={newChat}>
-              <Icon name="plus" size={13} /> New chat
-            </button>
+            <span className="xl:hidden">
+              <button className="dash-btn dash-btn-sm" onClick={newChat}>
+                <Icon name="plus" size={13} /> New chat
+              </button>
+            </span>
           ) : null
         }
       />
@@ -349,24 +371,36 @@ export default function AskMemory() {
 
       {/* Floats over the empty right-hand gutter rather than taking a column of its own, so the
           conversation stays centred at every width. Hidden below xl, where there is no gutter. */}
-      <aside
-        id="ask-history"
-        className="glass z-20 hidden w-[252px] flex-col p-2.5 xl:flex"
-        style={{
-          // .glass declares `position: relative` in globals.css, which sits outside Tailwind's
-          // utility layer and therefore beats `absolute` — without this the panel drops into the
-          // flow and lands under the composer. Inline wins.
-          position: "absolute",
-          right: 0,
-          top: 4,
-          maxHeight: "min(62vh, 520px)",
-        }}
-      >
-        <div className="mb-2 flex items-center justify-between gap-2 pl-1">
-          <p className="dash-eyebrow">History</p>
-          <button className="dash-btn dash-btn-sm" onClick={newChat} title="Start a new chat">
-            <Icon name="plus" size={13} /> New chat
+      {/* The wrapper does the positioning, not the panel: `.glass` declares `position: relative`
+          in globals.css, which sits outside Tailwind's utility layer and beats `absolute`. */}
+      <div className="absolute right-0 top-1 z-20 hidden xl:block">
+        {!histOpen ? (
+          <button
+            className="glass flex items-center gap-1.5 px-3 py-2 text-[12px] text-ink-2 transition hover:text-ink"
+            onClick={() => toggleHist(true)}
+            title="Show chat history"
+            aria-label="Show chat history"
+          >
+            <Icon name="clock" size={13} />
+            History{threads.length ? ` · ${threads.length}` : ""}
           </button>
+        ) : (
+          <aside id="ask-history" className="glass flex w-[252px] flex-col p-2.5" style={{ maxHeight: "min(62vh, 520px)" }}>
+        <div className="mb-2 flex items-center justify-between gap-1 pl-1">
+          <p className="dash-eyebrow">History</p>
+          <span className="flex items-center gap-1">
+            <button className="dash-btn dash-btn-sm" onClick={newChat} title="Start a new chat">
+              <Icon name="plus" size={13} /> New
+            </button>
+            <button
+              className="dash-btn dash-btn-sm px-1.5"
+              onClick={() => toggleHist(false)}
+              title="Collapse history"
+              aria-label="Collapse history"
+            >
+              <Icon name="x" size={13} />
+            </button>
+          </span>
         </div>
 
         <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5">
@@ -402,7 +436,9 @@ export default function AskMemory() {
             ))
           )}
         </div>
-      </aside>
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

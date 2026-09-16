@@ -192,7 +192,7 @@ answers with Groq in ~1–3 s. Golden-set recall and abstain precision: `scripts
 
 | Layer | Technology | Role |
 | --- | --- | --- |
-| **Frontend** | Next.js 16 · React 19 · TypeScript · Tailwind v4 | Laptop dashboard (`/app`), onboarding (`/onboarding`), phone console (`/app/console`), landing |
+| **Frontend** | Next.js 16 · React 19 · TypeScript · Tailwind v4 | Laptop dashboard (`/app`), onboarding (`/onboarding`), phone console (`/app/console`), landing. Ask memory takes spoken questions and reads answers back, and keeps a per-project chat history in the browser |
 | **Auth / tenancy** | Clerk (Organizations, session token v2) | Client company = org; projects per org; backend verifies JWT via JWKS |
 | **Voice transport** | LiveKit Agents 1.8 + `livekit-client` (WebRTC) | Full-duplex audio, barge-in, data events |
 | **STT** | **Sarvam** `saaras:v3-realtime` (live) / `saaras:v3` REST (uploads, Talk) → Groq Whisper `large-v3` fallback | Indian English / Hindi / Hinglish, plus `agent/stt_normalize.py` |
