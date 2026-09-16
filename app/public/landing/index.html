@@ -2578,9 +2578,11 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
   // Never nag a visitor who already chose; only a first-time visitor sees the bar.
   if (!saved) {
     bar.hidden = false;
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () { bar.setAttribute('data-show', ''); });
-    });
+    // Reading offsetHeight forces the layout that makes the transition animate from its
+    // start position. requestAnimationFrame would do the same, but it is paused in a
+    // background tab, so a page opened in one would never reveal the bar at all.
+    void bar.offsetHeight;
+    bar.setAttribute('data-show', '');
   }
   paint();
 })();
