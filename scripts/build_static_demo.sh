@@ -28,6 +28,11 @@ landing = re.sub(r'<a[^>]*href="/sign-(?:in|out)"[^>]*>.*?</a>', '', landing)
 (out / "index.html").write_text(landing)
 (out / "landing" / "index.html").write_text(landing)
 (out / "_redirects").write_text("/app /app/ 301\n/onboarding /onboarding/ 301\n/sign-in* /app/ 302\n/sign-up* /app/ 302\n/demo /demo/ 301\n")
+# next build emits its own bare 404.html at the output root and it wins over public/404.html,
+# so Cloudflare would serve "This page could not be found." Put ours back on top.
+custom_404 = pathlib.Path("app/public/404.html")
+if custom_404.exists():
+    (out / "404.html").write_text(custom_404.read_text())
 for junk in ("uploads",):
     p = out / junk
     if p.is_dir() and not any(p.iterdir()):
