@@ -202,7 +202,200 @@ Full request, identity, voice, memory, tenancy and deployment flows: [ARCHITECTU
 
 ---
 
-## 6. Run it locally
+## 6. Application architecture
+
+Four processes, one source of truth. The browser never holds a provider key: every third-party call
+(Rime, Sarvam, Groq, Ollama) is made server-side, and the dashboard talks only to FastAPI.
+
+```mermaid
+flowchart TB
+    subgraph clients["Clients"]
+        PH["📱 Phone console<br/>/app/console"]
+        LT["💻 Dashboard<br/>/app · /onboarding"]
+        LP["🌐 Landing + Docs<br/>static, Cloudflare Pages"]
+        MC["🤖 MCP client<br/>Claude Code · Cursor"]
+    end
+
+    subgraph edge["Next.js 16 · :3000"]
+        MW["proxy.ts<br/>Clerk middleware<br/>gates /app and /onboarding"]
+        UI["React 19 · Tailwind v4<br/>lib/api.ts · api-v2.ts · api-tenancy.ts<br/>attach Bearer per request"]
+    end
+
+    subgraph api["FastAPI · :8000"]
+        AUTH["tenancy/auth.py<br/>Clerk JWT via JWKS (RS256)<br/>or X-Vesper-* in local dev"]
+        ENG["Engine (pure Python)<br/>extract · numbers · contradictions<br/>dialogue · speech · answer"]
+        MEM["Memory API<br/>routes/memory.py · routes/ingest.py"]
+        TEN["Tenancy<br/>routes/tenancy.py<br/>orgs · projects · invites"]
+        TOOL["Agent tools<br/>routes/tools.py<br/>POST /mcp · /api/tools"]
+    end
+
+    subgraph voice["LiveKit agent worker"]
+        W["agent/worker.py<br/>Brain(project_id)"]
+        VP["voiceprofile.py<br/>ECAPA gate :8788"]
+    end
+
+    subgraph stores["Data"]
+        SITE[("site.db · 15 MB<br/>drawings · RFIs · permits<br/>hold points · observations")]
+        APP[("app.db · 80 MB<br/>orgs · projects · members<br/>documents · chunks · FTS5")]
+        VEC[("data/memory/ · 395 MB<br/>LanceDB vectors · Cognee graph")]
+        SUPA[("Supabase Postgres<br/>pgvector + tsvector mirror")]
+    end
+
+    subgraph ext["External"]
+        CLERK["Clerk"]
+        RIME["Rime TTS"]
+        SARVAM["Sarvam STT"]
+        LLM["Groq → Cerebras → NVIDIA"]
+        OLL["Ollama bge-m3"]
+        RESEND["Resend"]
+    end
+
+    PH & LT --> MW --> UI -->|"Bearer JWT"| AUTH
+    LP -.->|"no backend, no keys"| LP
+    MC -->|"JSON-RPC 2.0"| TOOL
+    AUTH --> ENG & MEM & TEN & TOOL
+    TOOL -->|"in-process ASGI"| ENG & MEM
+    PH <-->|"WebRTC"| W
+    W --> VP
+    W -->|"engine_bridge"| ENG
+    W --> SARVAM & RIME
+    ENG --> SITE
+    TEN --> APP
+    MEM --> APP & VEC
+    MEM --> OLL & LLM
+    TEN --> RESEND
+    AUTH -.->|"JWKS"| CLERK
+    APP & VEC -.->|"scripts/export_to_supabase.py"| SUPA
+```
+
+### Processes and ports
+
+| Process | Port | Start | Holds |
+| --- | --- | --- | --- |
+| Next.js frontend | 3000 | `npm run dev` | No keys except the Clerk publishable key |
+| FastAPI backend | 8000 | `uvicorn main:app` | Every provider key, all DB access |
+| Speaker ID sidecar | 8788 | `scripts/run_voiceid.sh` | ECAPA-TDNN voiceprints |
+| LiveKit agent worker | — | `agent/worker.py dev` | Joins rooms, runs the turn loop |
+
+### How a spoken turn travels
+
+1. **Audio in.** The phone publishes WebRTC audio to LiveKit; `agent/worker.py` receives it and Sarvam
+   streams back a transcript, normalised by `agent/stt_normalize.py` for site vocabulary.
+2. **Claim, not text.** `extract` + `numbers` turn the utterance into a structured claim —
+   location, element, attribute, value, drawing, revision.
+3. **Deterministic check.** `contradictions` runs rules over SQL views (`v_current_facts`,
+   `v_permit_blockers`, `v_open_hold_points`). **No model participates in this decision.**
+4. **Speak the challenge.** `dialogue` picks the reply; Rime speaks it; barge-in cancels playback.
+5. **Gate the write.** The utterance that authorises a write is re-verified against the enrolled
+   voiceprint. Below threshold, nothing is written.
+6. **Knowledge questions fork** to the memory layer instead of the rule engine, and come back with a
+   citation or an explicit abstention.
+
+### Identity and tenancy
+
+`CLERK_JWT_ISSUER` decides the mode. Set, and every request must carry a Clerk session JWT verified
+RS256 against the cached JWKS — *this requires `PyJWT[crypto]`; without the `cryptography` extra every
+token fails to verify*. Empty, and the backend reads `X-Vesper-User` / `X-Vesper-Org` / `X-Vesper-Role`
+so local development and the scenario runner need no sign-in. The org is always taken from the verified
+project row, never from request arguments, so a caller cannot reach another org's project by guessing an id.
+
+---
+
+## 7. Memory layer architecture
+
+The memory layer answers knowledge questions with citations, or refuses. It is deliberately separate
+from the rule engine: the engine decides *whether something is wrong*, memory decides *what the record says*.
+
+```mermaid
+flowchart TB
+    subgraph ing["Ingest · backend/memory/ingest.py"]
+        SRC["PDF · DOCX · XLSX · CSV · text<br/>site record · IS codes · QA/QC templates<br/>spoken briefings"]
+        PARSE["PyMuPDF · python-docx · openpyxl"]
+        CH["chunkers.py<br/>heading-aware · table-aware<br/>text + embed_text + entities + citation"]
+        EMB["embed.py → Ollama bge-m3<br/>1024-dim · cached in embed_cache.sqlite"]
+        SRC --> PARSE --> CH --> EMB
+    end
+
+    subgraph st["Storage · store.py"]
+        LV[("LanceDB<br/>chunks table<br/>vector(1024) + scope keys")]
+        FT[("SQLite FTS5<br/>chunks_fts<br/>unicode61, external content")]
+        KG[("Cognee graph<br/>Kuzu / Ladybug<br/>378 nodes · 1419 edges")]
+    end
+
+    subgraph ret["Query · retrieve.py → rerank.py → answer.py"]
+        Q["question + projectId"]
+        QE["embed query<br/>same bge-m3 model"]
+        VS["vector search<br/>cosine, dataset pre-filter"]
+        BM["BM25 over FTS5"]
+        RRF["Reciprocal Rank Fusion"]
+        RR["bge-reranker-v2-m3<br/>cross-encoder"]
+        AB{"score above<br/>threshold?"}
+        ANS["LLM phrases ONLY<br/>what retrieval returned<br/>+ citation"]
+        NO["🚫 'not in the record'"]
+    end
+
+    EMB --> LV
+    CH --> FT
+    CH -.->|"background worker"| KG
+    Q --> QE --> VS --> RRF
+    Q --> BM --> RRF --> RR --> AB
+    AB -->|yes| ANS
+    AB -->|no| NO
+    LV --> VS
+    FT --> BM
+```
+
+### Why hybrid, not just vectors
+
+Vectors alone miss exact identifiers — `RFI-047`, `A-102@R4`, `IS 456 Cl. 26.4`. BM25 alone misses
+paraphrase. Both lists are fused with Reciprocal Rank Fusion, then a cross-encoder reranks the survivors
+by actually reading query and passage together. The same `bge-m3` model runs at ingest and at query
+time; mixing embedding models across those two steps silently destroys recall.
+
+### Abstention is a feature
+
+If the reranked top score sits below threshold, Vesper says **"not in the record"** rather than letting
+the LLM improvise. Numbers that do not appear in the retrieved sources are stripped from the answer.
+On the golden set: recall@8 **1.000**, abstain precision and recall **1.000**, zero cross-project leaks.
+
+### Project isolation
+
+Every chunk carries `scope`, `org_id`, `project_id` and `dataset`. Datasets are named
+`<org>__proj_<project>` (for example `org_local_demo__proj_NSK`), and the dataset filter is applied
+**inside** the vector search as a pre-filter, not as a post-hoc trim — so another project's passages are
+never candidates in the first place. Global knowledge (IS codes, price schedules, templates) lives in
+shared `kb_*` datasets every project may read.
+
+| Dataset | Chunks |
+| --- | --- |
+| `kb_is_codes` | 7,310 |
+| `kb_templates` | 5,349 |
+| `kb_prices_sor` | 4,131 |
+| `kb_handbook` | 3,633 |
+| `org_local_demo__proj_NSK` | 150 |
+| `org_local_demo__proj_P1` | 141 |
+
+### Storage layout
+
+| Store | Holds | Size |
+| --- | --- | --- |
+| `data/memory/lancedb` | 20,734 bge-m3 vectors, one `chunks` table | 395 MB |
+| `data/app.db` | 7,365 documents, 20,734 chunks, FTS5 index, tenancy tables | 80 MB |
+| `data/site.db` | The engine's verified site record | 15 MB |
+| `data/memory/cognee` | Entity/relationship graph over the same documents | — |
+| Supabase `vesper.chunks` | Online mirror: `vector(1024)` + generated `tsvector` (GIN) | free tier |
+
+The Supabase mirror is a copy, not the source of truth. Local SQLite plus LanceDB stay authoritative;
+`scripts/export_to_supabase.py` refills the mirror and `--verify` compares row counts on both sides.
+
+### Latency
+
+Warm hybrid search is 20–130 ms per query over ~20k chunks on an Apple M3 (16 GB); the cross-encoder
+rerank dominates that budget. A full cited answer lands in roughly 1–3 s, almost all of it the LLM call.
+
+---
+
+## 8. Run it locally
 
 **Prereqs:** Python 3.13, Node 20+, [Ollama](https://ollama.com), ~16 GB RAM, and a filled-in `.env` /
 `backend/.env.local` (start from `.env.example`; never commit real keys).
@@ -307,7 +500,7 @@ approvals — production projects must onboard and ingest their own approved dra
 
 ---
 
-## 7. USPs
+## 9. USPs
 
 <table>
 <tr>
@@ -363,7 +556,7 @@ acceptance test. The bar is **zero wrong logs**.
 
 ---
 
-## 8. Rime voice contract
+## 10. Rime voice contract
 
 | Path | Model ID | Speaker | Language | Transport | Audio |
 | --- | --- | --- | --- | --- | --- |
@@ -377,7 +570,7 @@ acceptance test. The bar is **zero wrong logs**.
 
 ---
 
-## 9. Third-party services and failure behaviour
+## 11. Third-party services and failure behaviour
 
 | Service | Purpose | Failure behaviour |
 | --- | --- | --- |
@@ -389,7 +582,7 @@ acceptance test. The bar is **zero wrong logs**.
 | LiveKit Cloud | Voice transport | Token minting fails clearly; typed mode remains. |
 | SpeechBrain sidecar | Speaker verification | Fails closed: writes locked, questions still answered. |
 
-## 10. Authentication and deployment
+## 12. Authentication and deployment
 
 - `/` is public; `/app` and `/onboarding` require Clerk. Users without an organization are sent to Vesper's
   own `/onboarding/org` (pending sessions are accepted in `app/proxy.ts`).
@@ -412,7 +605,7 @@ scripts/build_static_demo.sh deploy                         # STATIC_DEMO=1 expo
 `STATIC_DEMO=1` exports only `*.static.tsx` routes, aliases `@clerk/nextjs` to a stub, and answers API calls
 from recorded JSON. The build fails if anything secret-shaped appears in the output.
 
-## 11. Known limitations
+## 13. Known limitations
 
 - The scenario harness and voice acceptance use scripted/synthetic audio, not a physical phone on a live slab.
 - Live-voice latency has not been re-measured since the move to Sarvam streaming STT.
