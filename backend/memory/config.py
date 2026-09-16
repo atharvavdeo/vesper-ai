@@ -29,7 +29,13 @@ def _key(name: str) -> str:
 
 # ---------------------------------------------------------------- paths
 DATA_DIR = Path(_env("VESPER_DATA_DIR", str(REPO_ROOT / "data")))
-APP_DB_PATH = Path(_env("MEMORY_APP_DB", str(DATA_DIR / "app.db")))
+def app_db_path() -> Path:
+    """Resolved per call so a test that sets APP_DB_PATH is not defeated by import order.
+    MEMORY_APP_DB still wins, then the tenancy-wide APP_DB_PATH, then data/app.db."""
+    return Path(_env("MEMORY_APP_DB", _env("APP_DB_PATH", str(DATA_DIR / "app.db"))))
+
+
+APP_DB_PATH = app_db_path()  # import-time snapshot, kept for callers that read the constant
 SITE_DB_PATH = Path(_env("MEMORY_SITE_DB", str(DATA_DIR / "site.db")))
 MEMORY_DIR = Path(_env("MEMORY_DIR", str(DATA_DIR / "memory")))
 LANCEDB_DIR = MEMORY_DIR / "lancedb"

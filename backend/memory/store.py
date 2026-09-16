@@ -39,8 +39,9 @@ def _open() -> sqlite3.Connection:
     except Exception:  # noqa: BLE001
         conn = None
     if conn is None:
-        config.APP_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(config.APP_DB_PATH), timeout=30, check_same_thread=False)
+        path = config.app_db_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(path), timeout=30, check_same_thread=False)
         conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")

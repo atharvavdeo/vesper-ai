@@ -15,8 +15,14 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = BACKEND_DIR.parent
-_raw = os.getenv("APP_DB_PATH", str(REPO_ROOT / "data" / "app.db"))
-APP_DB_PATH = _raw if os.path.isabs(_raw) else str((BACKEND_DIR / _raw).resolve())
+def db_path() -> str:
+    """Resolved per call, not at import: a test that sets APP_DB_PATH must not be defeated by
+    whichever module happened to import this one first (that pointed tests at the real data/app.db)."""
+    raw = os.getenv("APP_DB_PATH", str(REPO_ROOT / "data" / "app.db"))
+    return raw if os.path.isabs(raw) else str((BACKEND_DIR / raw).resolve())
+
+
+APP_DB_PATH = db_path()  # import-time snapshot, kept for callers that read the constant
 SCHEMA_FILES = (REPO_ROOT / "data" / "app_schema.sql", BACKEND_DIR / "memory" / "schema.sql")
 
 DEMO_ORG_ID = "org_local_demo"
@@ -37,9 +43,9 @@ def _schema_signature() -> tuple:
 
 def connect(path: str | None = None) -> sqlite3.Connection:
     """New connection per call (cheap). Safe to use from FastAPI threadpool handlers."""
-    db_path = path or APP_DB_PATH
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=10)
+    target = path or db_path()
+    Path(target).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(target, check_same_thread=False, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
