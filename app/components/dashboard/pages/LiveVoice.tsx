@@ -178,8 +178,16 @@ function RoomView({ onEnd, log }: { onEnd: () => void; log: ReturnType<typeof us
   // LiveKitRoom's `audio` prop publishes the microphone on connect, but a denied permission or a
   // device another app already holds fails quietly: the call stays up, the agent listens to
   // silence, and the only clue is a small "mic off" pill. Ask explicitly and say so loudly.
+  const micAsked = useRef(false);
   useEffect(() => {
-    if (String(conn) !== "connected" || !localParticipant || isMicrophoneEnabled) return;
+    if (String(conn) !== "connected") {
+      micAsked.current = false; // a fresh connection may ask again
+      return;
+    }
+    // Ask exactly once per connection. A device that keeps rejecting would otherwise be retried on
+    // every re-render, and hammering getUserMedia in a loop can take the whole tab down.
+    if (!localParticipant || isMicrophoneEnabled || micAsked.current) return;
+    micAsked.current = true;
     let cancelled = false;
     void localParticipant
       .setMicrophoneEnabled(true)
