@@ -70,12 +70,25 @@ class VoiceProfiler:
 
     async def _consume(self, track: rtc.Track) -> None:
         stream = rtc.AudioStream(track, sample_rate=SR, num_channels=1)
+        last_report, peak, frames = 0.0, 0, 0
         try:
             async for ev in stream:
                 if self._closed:
                     break
                 pcm = ev.frame.data.tobytes()
-                if _rms(pcm) < SPEECH_RMS:
+                level = _rms(pcm)
+                # Without this, a muted mic, a wrong input device and a silent room are
+                # indistinguishable from working audio: every sub-threshold frame is dropped
+                # below without a trace, so "nothing was transcribed" cannot be told apart from
+                # "nothing ever arrived". Report the observed level periodically.
+                peak = max(peak, level)
+                frames += 1
+                tnow = time.monotonic()
+                if tnow - last_report >= 3.0:
+                    logger.info("mic level: peak rms %d over %d frames (speech gate %d)",
+                                peak, frames, SPEECH_RMS)
+                    last_report, peak, frames = tnow, 0, 0
+                if level < SPEECH_RMS:
                     continue  # skip silence / muted mic so the window holds voiced audio
                 now_v = time.monotonic()
                 if now_v - self._last_voiced > SEGMENT_GAP_SEC:
