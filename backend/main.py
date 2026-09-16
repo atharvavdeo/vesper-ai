@@ -1,6 +1,7 @@
 """vesper-ai backend API. See backend/CONTRACT.md for the frozen contract."""
 from __future__ import annotations
 
+import base64
 import io
 import json
 import os
@@ -492,6 +493,34 @@ async def tts(request: Request):
     language = str(body.get("language") or "en-IN").strip().lower()
     if not text:
         raise HTTPException(422, "text required")
+    # Sarvam bulbul first: its Indian English and Hindi voices read as local, where Rime's English
+    # sounds foreign to the site managers this is for. Any Sarvam failure falls through to Rime
+    # rather than returning silence; TTS_PROVIDER=rime skips Sarvam entirely.
+    if os.getenv("TTS_PROVIDER", "sarvam").strip().lower() == "sarvam" and config.SARVAM_ENABLED:
+        sv_lang = "hi-IN" if language.startswith("hi") else "en-IN"
+        sv_model = os.getenv("SARVAM_TTS_MODEL", "bulbul:v3")
+        sv_speaker = os.getenv("SARVAM_TTS_SPEAKER", "ritu")
+        sv_key = f"sarvam:{sv_model}:{sv_speaker}:{sv_lang}:{text}"
+        if sv_key in _tts_cache:
+            return StreamingResponse(io.BytesIO(_tts_cache[sv_key]), media_type="audio/wav")
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as cx:
+                sr = await cx.post(
+                    "https://api.sarvam.ai/text-to-speech",
+                    headers={"api-subscription-key": config.SARVAM_API_KEY,
+                             "Content-Type": "application/json"},
+                    json={"text": text, "target_language_code": sv_lang,
+                          "model": sv_model, "speaker": sv_speaker})
+            if sr.status_code == 200:
+                b64 = (sr.json().get("audios") or [None])[0]
+                if b64:
+                    audio = base64.b64decode(b64)
+                    if len(_tts_cache) < 64:
+                        _tts_cache[sv_key] = audio
+                    return StreamingResponse(io.BytesIO(audio), media_type="audio/wav")
+        except Exception:
+            pass  # fall through to Rime
+
     if not config.RIME_ENABLED:
         return JSONResponse({"error": "rime key missing"}, status_code=503)
     use_hinglish = language.startswith("hi")
