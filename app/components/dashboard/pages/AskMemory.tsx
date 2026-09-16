@@ -13,6 +13,12 @@ type Msg =
   | { id: string; role: "user"; text: string }
   | { id: string; role: "assistant"; pending?: boolean; res?: AskResponse; via?: "memory" | "engine"; error?: string; ms?: number; query: string };
 
+/** A saved Ask thread. Ask is read-only and has no server-side history (`/api/conversations` holds
+ *  voice sessions, not these), so threads live in localStorage, scoped per project. */
+type Thread = { id: string; title: string; updatedAt: number; msgs: Msg[] };
+
+const THREAD_LIMIT = 40;
+
 const SUGGESTIONS = [
   "What cover does IS 456 require for columns?",
   "Why was A-101 revised to R2?",
@@ -29,6 +35,73 @@ export default function AskMemory() {
   const engineSession = useRef<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const storeKey = `vesper_ask_threads_${project.id}`;
+
+  const writeThreads = (next: Thread[]) => {
+    setThreads(next);
+    try {
+      localStorage.setItem(storeKey, JSON.stringify(next));
+    } catch {
+      /* private mode or full quota — history is a convenience, never block asking */
+    }
+  };
+
+  // Switching project switches history: a thread about P1 must not appear under NSK.
+  useEffect(() => {
+    let loaded: Thread[] = [];
+    try {
+      loaded = JSON.parse(localStorage.getItem(storeKey) || "[]");
+    } catch {
+      loaded = [];
+    }
+    setThreads(Array.isArray(loaded) ? loaded : []);
+    setActiveId(null);
+    setMsgs([]);
+  }, [storeKey]);
+
+  // Save once the answer has settled, so a half-finished "pending" bubble is never persisted.
+  useEffect(() => {
+    if (STATIC_DEMO || busy) return;
+    const settled = msgs.filter((m) => !(m.role === "assistant" && m.pending));
+    if (!settled.length) return;
+    const id = activeId ?? `t${Date.now()}`;
+    if (!activeId) setActiveId(id);
+    const first = settled.find((m) => m.role === "user");
+    const title = first && first.role === "user" ? first.text.slice(0, 70) : "Untitled";
+    setThreads((cur) => {
+      const next = [{ id, title, updatedAt: Date.now(), msgs: settled }, ...cur.filter((t) => t.id !== id)].slice(0, THREAD_LIMIT);
+      try {
+        localStorage.setItem(storeKey, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, [msgs, busy, activeId, storeKey]);
+
+  const newChat = () => {
+    setMsgs([]);
+    setActiveId(null);
+    setInput("");
+    taRef.current?.focus();
+  };
+
+  const openThread = (t: Thread) => {
+    setMsgs(t.msgs);
+    setActiveId(t.id);
+    setInspect(null);
+  };
+
+  const deleteThread = (id: string) => {
+    writeThreads(threads.filter((t) => t.id !== id));
+    if (activeId === id) {
+      setMsgs([]);
+      setActiveId(null);
+    }
+  };
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
@@ -145,15 +218,16 @@ export default function AskMemory() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-52px-3rem-4rem)] min-h-[520px] flex-col">
+    <div className="flex h-[calc(100dvh-52px-3rem-4rem)] min-h-[520px] gap-4">
+      <div className="flex min-w-0 flex-1 flex-col">
       <PageHeader
         eyebrow="Knowledge"
         title="Ask memory"
         description="Grounded answers over project documents, IS codes, templates and the site record — every claim cited, or an explicit abstain."
         actions={
           msgs.length ? (
-            <button className="dash-btn dash-btn-sm" onClick={() => setMsgs([])}>
-              <Icon name="refresh" size={13} /> New thread
+            <button className="dash-btn dash-btn-sm" onClick={newChat}>
+              <Icon name="plus" size={13} /> New chat
             </button>
           ) : null
         }
@@ -273,6 +347,50 @@ export default function AskMemory() {
           </div>
         ) : null}
       </Sheet>
+      </div>
+
+      <aside className="hidden w-[250px] shrink-0 flex-col pt-1 xl:flex">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="dash-eyebrow">History</p>
+          <button className="dash-btn dash-btn-sm" onClick={newChat} title="Start a new chat">
+            <Icon name="plus" size={13} /> New chat
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+          {threads.length === 0 ? (
+            <p className="card px-3 py-2.5 text-[12px] leading-relaxed text-ink-3">
+              Past questions land here. They stay in this browser — Ask is read-only, so nothing is written to the
+              site record.
+            </p>
+          ) : (
+            threads.map((t) => (
+              <div
+                key={t.id}
+                className="group card card-hover flex items-start gap-2 px-3 py-2.5"
+                style={t.id === activeId ? { borderColor: "var(--accent)" } : undefined}
+              >
+                <button onClick={() => openThread(t)} className="min-w-0 flex-1 text-left" title={t.title}>
+                  <span className="block truncate text-[12.5px] leading-snug text-ink">{t.title}</span>
+                  <span className="mt-0.5 block text-[11px] text-ink-3">
+                    {new Date(t.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    {" · "}
+                    {new Date(t.updatedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </button>
+                <button
+                  onClick={() => deleteThread(t.id)}
+                  aria-label={`Delete thread: ${t.title}`}
+                  title="Delete"
+                  className="mt-0.5 shrink-0 text-ink-3 opacity-0 transition hover:text-ink focus:opacity-100 group-hover:opacity-100"
+                >
+                  <Icon name="x" size={12} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
