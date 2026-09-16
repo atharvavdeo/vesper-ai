@@ -213,6 +213,46 @@ The web service, agent worker and VoiceID sidecar intentionally deploy separatel
 release cannot restart an active voice worker, and a LiveKit reconnect does not weaken the
 HTTP chat fallback or the deterministic data store.
 
+### What is actually deployed today
+
+The topology above is the hosted plan. What runs right now is a split: the **public surface is static
+on Cloudflare Pages** and carries no backend and no keys, while the engine, memory and voice stack run
+locally.
+
+```mermaid
+flowchart LR
+  classDef client fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+  classDef service fill:#ecfdf5,stroke:#059669,color:#064e3b
+  classDef store fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+
+  Visitor["Any visitor"]:::client
+  CF["Cloudflare Pages<br/>vesper-ai.pages.dev<br/>landing · /docs · /demo · /app replay · 404"]:::client
+  Local["Local machine"]:::service
+  Next["Next.js :3000"]:::service
+  API["FastAPI :8000"]:::service
+  VID["VoiceID :8788"]:::service
+  OLL["Ollama :11434"]:::service
+  WRK["LiveKit worker"]:::service
+  Stores[("site.db · app.db · data/memory")]:::store
+  Supa[("Supabase Postgres<br/>pgvector mirror")]:::store
+
+  Visitor --> CF
+  CF -.->|"no backend, no keys<br/>recorded output only"| CF
+  Local --> Next --> API --> Stores
+  API --> VID & OLL
+  WRK --> API
+  Stores -.->|"scripts/export_to_supabase.py"| Supa
+```
+
+| Surface | Where | Auth | Notes |
+| --- | --- | --- | --- |
+| Landing, Docs, demo, `/app` replay, 404 | Cloudflare Pages | none | `scripts/build_static_demo.sh deploy`; the build strips `/sign-in` and `/sign-out` links and fails if any secret-shaped string appears in the output |
+| Dashboard, onboarding, live voice | local `:3000` + `:8000` | Clerk JWT | needs provider keys in `backend/.env.local` |
+| Memory mirror | Supabase `ap-south-1` | service credentials | copy only; local SQLite + LanceDB stay authoritative |
+
+The static build writes its own `404.html`, so the build explicitly copies `app/public/404.html` over
+it — otherwise Cloudflare serves the framework default instead of the project's page.
+
 ## 6. v2: memory layer, tenancy and onboarding
 
 v2 adds three things around the unchanged deterministic engine: a local memory layer for
@@ -279,3 +319,145 @@ flowchart LR
 
 Detailed design and per-workstream reports: `docs/plan/PLAN.md`, `docs/plan/PROGRESS.md`,
 `docs/plan/reports/`.
+
+---
+
+## 7. Application architecture in detail
+
+### Processes, ports and what each one is trusted with
+
+| Process | Port | Start | Trusted with |
+| --- | --- | --- | --- |
+| Next.js frontend | 3000 | `npm run dev` | Clerk **publishable** key only |
+| FastAPI backend | 8000 | `uvicorn main:app` | Every provider key, all database access |
+| Speaker ID sidecar | 8788 | `scripts/run_voiceid.sh` | ECAPA-TDNN voiceprints; fails closed |
+| Ollama | 11434 | `ollama serve` | Local `bge-m3` embeddings; never leaves the machine |
+| LiveKit agent worker | — | `agent/worker.py dev` | Joins rooms, runs the turn loop |
+| Cognee graph worker | — | `backend/memory/cognee_worker.py` | Background entity/relationship extraction |
+
+The browser never holds a provider secret. Rime, Sarvam, Groq/Cerebras/NVIDIA and Ollama are all
+reached server-side; the only credential that reaches the client is the Clerk publishable key.
+
+### Module map
+
+| Concern | Modules |
+| --- | --- |
+| Deterministic engine | `extract` · `numbers` · `contradictions` · `dialogue` · `speech` · `answer` |
+| HTTP surface | `backend/main.py` (v1 engine, STT/TTS proxies) · `routes/tenancy.py` · `routes/memory.py` · `routes/ingest.py` · `routes/tools.py` |
+| Memory | `memory/ingest.py` · `chunkers.py` · `embed.py` · `store.py` · `retrieve.py` · `rerank.py` · `answer.py` · `cognee_worker.py` |
+| Voice | `agent/worker.py` · `worker_prompts.py` · `engine_bridge.py` · `stt_normalize.py` · `voiceprofile.py` |
+| Frontend clients | `lib/api.ts` · `api-v2.ts` · `api-tenancy.ts` — all three share one Clerk token getter |
+
+### Two authentication modes, one switch
+
+`CLERK_JWT_ISSUER` decides everything:
+
+| Mode | Condition | Request must carry | Used by |
+| --- | --- | --- | --- |
+| Clerk | issuer set | `Authorization: Bearer <session JWT>`, verified RS256 against cached JWKS | deployment, real sign-in |
+| Local | issuer empty | nothing, or `X-Vesper-User` / `X-Vesper-Org` / `X-Vesper-Role` | scenario runner, tests, offline demos |
+
+Two independent verifiers implement this — `tenancy/auth.py` for the v2 routes and `_user_id()` in
+`main.py` for the v1 engine routes. **They must be changed together**; instrumenting only one hides
+the other's failures.
+
+> **Operational trap, hit in practice.** RS256 verification requires the `cryptography` package.
+> `requirements.txt` pins `PyJWT[crypto]`, but a virtualenv built without the extra raises
+> `MissingCryptographyError` and **every** Clerk token fails with a generic `invalid sign-in token`,
+> regardless of how valid it is. Both verifiers now log the underlying `PyJWTError` so the cause is
+> visible in the server log while the client still sees only the generic message.
+
+### Invariants that survive every path
+
+1. A contradiction is decided by rules over SQL views, never by a model.
+2. Nothing is written until a verified human explicitly decides.
+3. The org comes from the verified project row, never from request arguments.
+4. Memory can answer, cite and abstain — it can never authorise a log.
+
+---
+
+## 8. Memory layer in detail
+
+Memory is deliberately separate from the rule engine. The engine decides *whether something is wrong*;
+memory decides *what the record says*. Memory never authorises a write.
+
+### Ingest
+
+```mermaid
+flowchart LR
+  SRC["PDF · DOCX · XLSX · CSV · text<br/>site record · IS codes · templates<br/>spoken briefings"]
+  PARSE["PyMuPDF · python-docx · openpyxl"]
+  CH["chunkers.py<br/>heading-aware · whole-table for rate/SOR<br/>SHA-256 dedup · stable chunk ids"]
+  EMB["embed.py → Ollama bge-m3<br/>1024-dim · embed_cache.sqlite"]
+  LV[("LanceDB chunks")]
+  FT[("SQLite FTS5")]
+  KG[("Cognee graph<br/>Kuzu / Ladybug")]
+  SRC --> PARSE --> CH --> EMB --> LV
+  CH --> FT
+  CH -. "background" .-> KG
+```
+
+Each chunk stores `text` (what the answerer reads) separately from `embed_text` (what was embedded),
+plus `entities` for exact-ID matching and a spoken `citation` string.
+
+### Query
+
+```mermaid
+flowchart LR
+  Q["question + projectId"] --> QE["embed query<br/>same bge-m3"]
+  Q --> BM["BM25 over FTS5"]
+  QE --> VS["vector search<br/>cosine, dataset pre-filter"]
+  VS --> RRF["RRF k=60"]
+  BM --> RRF --> RR["bge-reranker-v2-m3<br/>cross-encoder"]
+  RR --> AB{"above<br/>abstain threshold?"}
+  AB -->|yes| ANS["LLM phrases ONLY retrieved content<br/>+ citation"]
+  AB -->|no| NO["'not in the record'"]
+```
+
+**Why both legs.** Vectors miss exact identifiers (`RFI-047`, `A-102@R4`, `IS 456 Cl. 26.4`); BM25
+misses paraphrase. Both lists fuse with Reciprocal Rank Fusion, then a cross-encoder reranks the
+survivors by reading query and passage together.
+
+**One model, both ends.** The same `bge-m3` runs at ingest and at query time. Mixing embedding models
+across those steps silently destroys recall and produces no error.
+
+**Abstention is a feature.** Below threshold, Vesper says *"not in the record"* rather than letting the
+LLM improvise, and numbers absent from the retrieved sources are stripped from the answer. Golden set:
+recall@8 **1.000**, abstain precision and recall **1.000**, zero cross-project leaks.
+
+### Isolation
+
+Every chunk carries `scope`, `org_id`, `project_id` and `dataset`, named `<org>__proj_<project>`
+(e.g. `org_local_demo__proj_NSK`). The dataset filter is applied **as a pre-filter inside the vector
+search**, not as a post-hoc trim — another project's passages are never candidates in the first place.
+Global knowledge lives in shared `kb_*` datasets that every project may read.
+
+| Dataset | Chunks |
+| --- | --- |
+| `kb_is_codes` | 7,310 |
+| `kb_templates` | 5,349 |
+| `kb_prices_sor` | 4,131 |
+| `kb_handbook` | 3,633 |
+| `org_local_demo__proj_NSK` | 150 |
+| `org_local_demo__proj_P1` | 141 |
+
+### Storage and the online mirror
+
+| Store | Holds | Size |
+| --- | --- | --- |
+| `data/memory/lancedb` | 20,734 bge-m3 vectors | 395 MB |
+| `data/app.db` | 7,365 documents, 20,734 chunks, FTS5, tenancy | 80 MB |
+| `data/site.db` | verified site record for the engine | 15 MB |
+| `data/memory/cognee` | entity/relationship graph | — |
+| Supabase `vesper.chunks` | `vector(1024)` + generated `tsvector` (GIN) | free tier |
+
+Postgres replaces FTS5 with a generated `tsvector` column and a GIN index; the vectors move into
+pgvector. The mirror is a **copy**: local SQLite plus LanceDB remain authoritative, and
+`scripts/export_to_supabase.py --verify` compares row counts on both sides.
+
+### Latency
+
+Warm hybrid search runs 20–130 ms per query over ~20k chunks on an Apple M3 (16 GB); the cross-encoder
+rerank dominates that budget. A full cited answer lands in roughly 1–3 s, nearly all of it the LLM call.
+Responses carry `timingsMs` per leg so a regression can be attributed rather than guessed at.
+

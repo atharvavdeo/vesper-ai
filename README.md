@@ -19,6 +19,15 @@
 
 **[Try the dashboard](https://vesper-ai.pages.dev/app/)** · **[Hear the voice demo](https://vesper-ai.pages.dev/demo/)** · [Demo script](DEMO.md) · [Architecture](ARCHITECTURE.md) · [Rime evidence](RIME_EVIDENCE.md)
 
+<br/>
+
+![Status](https://img.shields.io/badge/status-closed-2ea44f?style=for-the-badge)
+![Workstreams](https://img.shields.io/badge/W0–W8-complete-0284c7?style=for-the-badge)
+
+**Closed 2026-09-16.** All workstreams complete: 10/10 P1 and 8/8 NSK scenarios with zero wrong logs,
+memory at recall@8 1.000 with no cross-project leaks, Clerk auth live, MCP server documented, and the
+public site deployed. Status board and close-out notes: [docs/plan/PROGRESS.md](docs/plan/PROGRESS.md).
+
 </div>
 
 ---
