@@ -92,7 +92,7 @@ flowchart LR
     B --> C["Site record<br/>v_current_facts · v_permit_blockers<br/>v_open_hold_points"]
     C --> D{"Deterministic<br/>contradiction rules"}
     D -->|clean| E["✅ Log observation<br/>linked to verified IDs"]
-    D -->|conflict| F["🔊 Spoken challenge<br/>via Rime TTS"]
+    D -->|conflict| F["🔊 Spoken challenge<br/>via Sarvam bulbul TTS"]
     F --> G{"Manager decides"}
     G --> E
     G --> H["📄 Raise RFI / NCR<br/>⛔ Stop work"]
@@ -113,7 +113,8 @@ Contradictions are decided by **rules over SQL views**, never by the LLM:
 | `permit_blocker` | a mandatory permit check is unsatisfied |
 | `hold_point_blocker` | a QA/QC hold point has not been released |
 
-**3 · It challenges you out loud.** Rime speaks the correction with citations and the choices you have.
+**3 · It challenges you out loud.** Sarvam `bulbul` speaks the correction with citations and the choices
+you have, in an Indian English or Hindi voice (Rime remains the fallback).
 
 **4 · Nothing is written until a verified human decides.** A local SpeechBrain ECAPA-TDNN speaker gate verifies the
 enrolled manager before any write; each command's own utterance is re-verified at write time.
@@ -195,7 +196,7 @@ answers with Groq in ~1–3 s. Golden-set recall and abstain precision: `scripts
 | **Auth / tenancy** | Clerk (Organizations, session token v2) | Client company = org; projects per org; backend verifies JWT via JWKS |
 | **Voice transport** | LiveKit Agents 1.8 + `livekit-client` (WebRTC) | Full-duplex audio, barge-in, data events |
 | **STT** | **Sarvam** `saaras:v3-realtime` (live) / `saaras:v3` REST (uploads, Talk) → Groq Whisper `large-v3` fallback | Indian English / Hindi / Hinglish, plus `agent/stt_normalize.py` |
-| **TTS** | **Rime** `mistv3`/`cove`/`eng` over websocket (live); HTTPS via `/api/tts` (Talk) | Every spoken reply; key never reaches the browser |
+| **TTS** | **Sarvam** `bulbul:v3` (`ritu`, `en-IN`/`hi-IN`) → **Rime** `mistv3`/`cove` fallback | Every spoken reply — live voice, Talk and Ask memory's "Listen"; key never reaches the browser. `TTS_PROVIDER=rime` switches back |
 | **LLM** | Groq `openai/gpt-oss-120b` → Cerebras `gpt-oss-120b` → NVIDIA NIM | Grounded answer phrasing and slot filling only |
 | **Memory** | Ollama `bge-m3` embeddings · `bge-reranker-v2-m3` · LanceDB · SQLite FTS5 · Cognee (local Ladybug graph, `data/vendor/ladybug`) | Hybrid retrieval, reranking, abstention, knowledge graph — one isolated dataset per project (`<org>__proj_<id>`) |
 | **Documents** | PyMuPDF · python-docx · openpyxl | PDF, DOCX, XLSX, CSV, text and spoken briefings → chunked, embedded, cited by page |
