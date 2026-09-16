@@ -394,6 +394,7 @@ shared `kb_*` datasets every project may read.
 | `data/site.db` | The engine's verified site record | 15 MB |
 | `data/memory/cognee` | Entity/relationship graph over the same documents | — |
 | Supabase `vesper.chunks` | Online mirror: `vector(1024)` + generated `tsvector` (GIN) | free tier |
+| Neo4j Aura `vesper01` | Write-only backup of the Cognee graph — 850 nodes, 3,638 relationships | free tier |
 
 The Supabase mirror is a copy, not the source of truth. Local SQLite plus LanceDB stay authoritative;
 `scripts/export_to_supabase.py` refills the mirror and `--verify` compares row counts on both sides.

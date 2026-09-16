@@ -473,6 +473,7 @@ Global knowledge lives in shared `kb_*` datasets that every project may read.
 | `data/site.db` | verified site record for the engine | 15 MB |
 | `data/memory/cognee` | entity/relationship graph | — |
 | Supabase `vesper.chunks` | `vector(1024)` + generated `tsvector` (GIN) | free tier |
+| Neo4j Aura `vesper01` | Write-only backup of the Cognee graph (`scripts/export_graph_to_neo4j.py`) | free tier |
 
 Postgres replaces FTS5 with a generated `tsvector` column and a GIN index; the vectors move into
 pgvector. The mirror is a **copy**: local SQLite plus LanceDB remain authoritative, and
