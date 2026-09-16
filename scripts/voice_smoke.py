@@ -52,7 +52,12 @@ async def publish_wav(source: rtc.AudioSource, path: pathlib.Path, rate: int, ch
     with wave.open(str(path)) as w:
         pcm = w.readframes(w.getnframes())
     per_frame = int(rate * channels * 2 * FRAME_MS / 1000)  # int16
-    silence = b"\x00" * per_frame
+    # Pure digital silence is not what a real room sounds like, and a hard cut from 0 straight into
+    # speech can make server-side VAD miss the onset and clip the first word. Use very low-level
+    # dither instead: audible to VAD as "room tone", far below the speech gate.
+    import random
+    silence = bytes(b for _ in range(per_frame // 2)
+                    for b in int(random.randint(-12, 12)).to_bytes(2, "little", signed=True))
 
     async def send(chunk: bytes) -> None:
         frame = rtc.AudioFrame(
