@@ -27,3 +27,6 @@ backend/.venv-cognee/
 .code-review-graph/
 data/vendor/
 data/app.db.bak-*
+
+# rendered email previews (scripts/send_product_update.py --preview)
+*_preview.html
