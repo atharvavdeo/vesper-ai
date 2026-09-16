@@ -167,7 +167,15 @@ def _stt(vad) -> stt.STT:
             stream_type=os.getenv("SARVAM_STT_STREAM_TYPE", "fast"),
             prompt=SARVAM_STT_PROMPT, api_key=os.getenv("SARVAM_API_KEY"),
             # server end-of-utterance; LiveKit's own VAD endpointing still decides the turn
-            vad_min_silence_ms=int(os.getenv("SARVAM_STT_SILENCE_MS", "350")))
+            vad_min_silence_ms=int(os.getenv("SARVAM_STT_SILENCE_MS", "350")),
+            # Measured with scripts/voice_smoke.py: the first word was being eaten. "Any open RFIs?"
+            # came back as "FIS" and a cover question as "Eight Two", while the same files
+            # transcribe in full over the REST path. Server VAD was opening the utterance after
+            # speech had already started, so hold a longer pre-roll, trip on quieter onsets, and
+            # accept shorter bursts of speech.
+            vad_prefix_padding_ms=int(os.getenv("SARVAM_STT_PREFIX_PADDING_MS", "700")),
+            vad_sot_threshold=float(os.getenv("SARVAM_STT_SOT_THRESHOLD", "0.2")),
+            vad_min_speech_ms=int(os.getenv("SARVAM_STT_MIN_SPEECH_MS", "120")))
     else:  # e.g. saaras:v4 over the non-realtime websocket (final per utterance only)
         primary = sarvam.STT(language=language if language != "auto" else "en-IN", model=model,
                              mode=mode, api_key=os.getenv("SARVAM_API_KEY"))
