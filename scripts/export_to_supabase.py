@@ -79,8 +79,12 @@ def load_vectors() -> dict[str, list[float]]:
     import lancedb
 
     tbl = lancedb.connect(str(LANCE_DIR)).open_table("chunks")
+    try:  # zero-copy scan when pylance is installed
+        batches = tbl.to_lance().to_batches(columns=["chunk_id", "vector"])
+    except ImportError:  # plain Arrow read — ~85 MB for 20.7k x 1024 float32, fine in memory
+        batches = tbl.to_arrow().select(["chunk_id", "vector"]).to_batches()
     out: dict[str, list[float]] = {}
-    for batch in tbl.to_lance().to_batches(columns=["chunk_id", "vector"]):
+    for batch in batches:
         ids = batch.column("chunk_id").to_pylist()
         vecs = batch.column("vector").to_pylist()
         out.update(zip(ids, vecs))
