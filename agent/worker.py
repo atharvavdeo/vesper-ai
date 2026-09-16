@@ -186,7 +186,34 @@ def _stt(vad) -> stt.STT:
                                max_retry_per_stt=1, retry_interval=2.0)
 
 
-def _tts():
+def tts_description(language: str = "en-IN") -> dict:
+    if os.getenv("TTS_PROVIDER", "sarvam").strip().lower() == "sarvam" and _keyok("SARVAM_API_KEY"):
+        return {"provider": "sarvam", "model": os.getenv("SARVAM_TTS_MODEL", "bulbul:v3"),
+                "speaker": os.getenv("SARVAM_TTS_SPEAKER", "ritu"),
+                "lang": "hi-IN" if str(language).lower().startswith("hi") else "en-IN",
+                "transport": "https"}
+    return {"provider": "rime", "model": "mistv3", "lang": "eng",
+            "speaker": os.getenv("RIME_SPEAKER_EN", "cove"), "transport": "websocket"}
+
+
+def _tts(language: str = "en-IN"):
+    """Sarvam bulbul by default: its Indian English and Hindi voices read as local on site, where
+    Rime's English sounds foreign to the managers this is built for. bulbul:v3 is the cheapest one
+    still served — v2 answers "Model 'bulbul:v2' has been deprecated". TTS_PROVIDER=rime restores
+    the previous path, and the engine's spoken text is identical either way."""
+    if os.getenv("TTS_PROVIDER", "sarvam").strip().lower() == "sarvam" and _keyok("SARVAM_API_KEY"):
+        try:
+            return sarvam.TTS(
+                target_language_code="hi-IN" if str(language).lower().startswith("hi") else "en-IN",
+                model=os.getenv("SARVAM_TTS_MODEL", "bulbul:v3"),
+                # v3 dropped the v2 voices: "anushka" raises here rather than at call time.
+                speaker=os.getenv("SARVAM_TTS_SPEAKER", "ritu"),
+                api_key=os.getenv("SARVAM_API_KEY"))
+        except ValueError as e:
+            # A speaker/model mismatch raises during construction and takes the whole job with it:
+            # the agent joins the room and dies before it says a word, which reads to the manager
+            # as a dead line. Voice is the product — fall back to Rime instead of going silent.
+            logger.warning("Sarvam TTS unavailable (%s); falling back to Rime", e)
     # English, low latency: mistv3 over websocket cuts first-audio delay.
     return rime.TTS(model="mistv3", speaker=os.getenv("RIME_SPEAKER_EN", "cove"), lang="eng",
                     api_key=os.getenv("RIME_API_KEY"), use_websocket=True)
@@ -350,7 +377,7 @@ async def entrypoint(ctx: JobContext) -> None:
     session = AgentSession(
         stt=_stt(vad),
         llm=_llm(),
-        tts=_tts(),
+        tts=_tts(language),
         vad=vad,
         user_away_timeout=1800.0,
         turn_handling={
@@ -391,8 +418,7 @@ async def entrypoint(ctx: JobContext) -> None:
     await agent.publish({"type": "session", "session_id": brain.session_id,
                          "speaker_required": brain.speaker_required,
                          "stt": stt_description(),
-                         "tts": {"provider": "rime", "model": "mistv3", "lang": "eng",
-                                 "speaker": os.getenv("RIME_SPEAKER_EN", "cove"), "transport": "websocket"}})
+                         "tts": tts_description(language)})
     session.say(speakable(greeting(brief)))
 
 

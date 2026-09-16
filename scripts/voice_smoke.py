@@ -129,6 +129,7 @@ async def main() -> int:
             print(f"  [voice ] match={payload.get('match')} score={payload.get('score')}")
         elif kind == "session":
             print(f"  [session] stt={json.dumps(payload.get('stt'))}")
+            print(f"  [session] tts={json.dumps(payload.get('tts'))}")
         elif kind == "brief":
             b = payload.get("brief") or {}
             print(f"  [brief ] {len(b.get('open_rfis') or [])} RFIs, "
