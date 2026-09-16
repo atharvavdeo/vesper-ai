@@ -170,8 +170,32 @@ function RoomView({ onEnd, log }: { onEnd: () => void; log: ReturnType<typeof us
   const [engineReplies, setEngineReplies] = useState<Row[]>([]);
   const { push } = log;
 
+  const [micError, setMicError] = useState<string | null>(null);
+
   useEffect(() => push("state", "conn", String(conn)), [conn, push]);
   useEffect(() => push("state", "agent", `state → ${state}`), [state, push]);
+
+  // LiveKitRoom's `audio` prop publishes the microphone on connect, but a denied permission or a
+  // device another app already holds fails quietly: the call stays up, the agent listens to
+  // silence, and the only clue is a small "mic off" pill. Ask explicitly and say so loudly.
+  useEffect(() => {
+    if (String(conn) !== "connected" || !localParticipant || isMicrophoneEnabled) return;
+    let cancelled = false;
+    void localParticipant
+      .setMicrophoneEnabled(true)
+      .then(() => {
+        if (!cancelled) setMicError(null);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const msg = (e as Error)?.message || String(e);
+        setMicError(msg);
+        push("error", "mic", `microphone not published: ${msg}`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conn, localParticipant, isMicrophoneEnabled, push]);
 
   const micRef = useMemo<TrackReferenceOrPlaceholder | undefined>(
     () => (localParticipant ? { participant: localParticipant, source: Track.Source.Microphone, publication: microphoneTrack } : undefined),
@@ -233,6 +257,18 @@ function RoomView({ onEnd, log }: { onEnd: () => void; log: ReturnType<typeof us
     <>
       <RoomAudioRenderer />
       <StartAudio label="Click to enable Vesper’s voice" className="dash-btn mb-3 w-full" />
+      {micError || (String(conn) === "connected" && !isMicrophoneEnabled) ? (
+        <div className="mb-3">
+          <Notice tone="danger" title="Vesper cannot hear you — your microphone is not being sent">
+            <p>
+              The call is connected, but no microphone track is published, so nothing is transcribed.
+              Allow microphone access for this site in your browser, close any other app holding the
+              mic, then press the mic button.
+            </p>
+            {micError ? <p className="mt-1 font-mono text-[11.5px]">{micError}</p> : null}
+          </Notice>
+        </div>
+      ) : null}
       <Stage
         status={isMicrophoneEnabled ? String(state ?? "idle") : "mic off"}
         active={state === "speaking" || state === "listening"}
