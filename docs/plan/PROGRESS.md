@@ -3,7 +3,7 @@
 Single place for status. Contract and decisions: [PLAN.md](PLAN.md). Per-workstream detail:
 `reports/W<n>.md`. Research: `research/`. Commits are made per folder when the user asks.
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16 — **project closed**
 
 ## Status board
 
@@ -16,7 +16,7 @@ Last updated: 2026-09-15
 | W4 | Onboarding wizard + ingest UI (upload / text / speak) | ✅ done ([report](reports/W4.md)) | /onboarding, /onboarding/org, 12-step /onboarding/project, /onboarding/invite, IngestPanel, OnboardingGate, proxy guard; tsc clean; browser-checked light/dark desktop+mobile via dev preview. Needs E2E against live backend (W7). Clerk forces org selection → task URL set to /onboarding/org (W3, layout) |
 | W5 | Sarvam saaras:v3 STT, name/ID normaliser, Groq primary LLM, stronger prompts | 🟡 mostly done | Sarvam `saaras:v3-realtime` live in agent (Whisper fallback), `/api/stt` on Sarvam REST, normaliser, Groq primary, stronger prompts, `search_memory` tool; regex crash fixed; worker running. Remaining: P11 latency re-run, P12 report |
 | W6 | Crawl remaining InfraLens sections (IS code, prices, steel, SOR, rate analysis, handbook, terms) | ✅ done ([report](reports/W6.md)) | 0 parse errors, 326 MB; many code pages are thin stubs (W1 filters/weights); `projects` (151) and `boq` (59) not crawled yet. 6,690 pages cached + parsed: code 4,391 · prices 869 · term 394 · steel 220 · thumbrules 151 · knowledge 120 · sor 118 · rate-analysis 118 · handbook 98 · dcr 78 · gate 76 · cpheeo 48 · irc 9. 762 inventory URLs were 404 on the site. Docs being finalised |
-| W7 | Integration: all services, eval, 10/10 scenarios, browser check light+dark | 🟡 in progress (main) | Onboarding E2E, Ask memory, dashboard pages verified; static demo built; deploy pending (P9) |
+| W7 | Integration: all services, eval, 10/10 scenarios, browser check light+dark | ✅ done | Onboarding E2E, Ask memory, dashboard pages verified; static demo built **and deployed** to vesper-ai.pages.dev; Clerk JWT verification live; memory mirrored to Supabase |
 | W8 | Nashik (NSK) site record + multi-project voice/engine | ✅ done ([report](reports/W8.md)) | NSK seed (21 revisions, 261 facts, 12 RFIs, 5 permits), 8/8 NSK + 10/10 P1 scenarios, projectId through API/voice/dashboard, memory eval recall@8 1.000, no scope leaks |
 
 ## Findings so far
@@ -145,8 +145,35 @@ Order: W3 wraps up → W1 memory finishes (routes, ingest, fix 1, eval, speed) �
 - Complete dashboard in light + dark, liquid glass, retrieval inspector showing per-leg latency + rerank scores.
 - Backend on :8000 predates the v2 router hook — restart it at integration (W7).
 
-## Next
+## Project closed — 2026-09-16
 
-1. Collect W1–W6 reports, update this board.
-2. W1 ingests crawled sections as W6 finishes.
-3. W7 integration pass.
+All workstreams W0–W8 are done. The project is closed for feature work; local services stay running.
+
+### Final state
+
+| Area | Where it landed |
+| --- | --- |
+| Engine | P1 10/10 and NSK 8/8 scenarios, 0 wrong logs; 15/15 backend tests |
+| Memory | 20,734 chunks / 7,365 documents; recall@8 1.000, abstain P/R 1.000, no cross-project leaks |
+| Online mirror | Supabase `vesper` (ap-south-1, free tier): every table row-matched, 20,734 pgvector rows |
+| Auth | Clerk JWT verification live and proven end to end (`/api/drawings`, `/api/me` → 200) |
+| Agent tools | `POST /mcp` + `/api/tools`, 11 tools, documented in `docs/MCP.md` |
+| Public site | vesper-ai.pages.dev — landing, `/docs`, `/demo`, `/app` replay, custom 404, cookie consent |
+| Email | 5 Resend templates incl. a `product_update` broadcast with `scripts/send_product_update.py`; live send verified |
+| Docs | README §6–§7 and ARCHITECTURE §7–§8 carry the detailed app and memory-layer architecture |
+
+### Fixed during close-out
+
+- `APP_DB_PATH` was resolved at import time, so tests wrote into the real `data/app.db`.
+- `PyJWT` without the `cryptography` extra made **every** Clerk token fail as "invalid sign-in token".
+- The static build served the framework's default 404 instead of the project's page.
+- The cookie bar was revealed inside `requestAnimationFrame`, which never fires in a background tab.
+- Both JWT verifiers (`tenancy/auth.py`, `main.py`) now log why a token was rejected.
+
+### Known open items (deliberately not closed)
+
+- Rotate the Supabase database password (it was shared in chat).
+- Verify a domain at resend.com/domains and set `RESEND_FROM`; test mode only reaches the account owner.
+- Voice latency re-run (P11) and the W5 STT report (P12).
+- Neo4j Aura mirror (P19) was never started.
+- A real microphone call on NSK still needs a human on the line.
