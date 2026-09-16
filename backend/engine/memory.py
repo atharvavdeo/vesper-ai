@@ -291,7 +291,11 @@ def greeting(brief: dict) -> str:
     logs = brief.get("recent_daily_logs") or []
     parts = ["Vesper here."]
     if logs:
-        parts.append(f"Last site day, {_first_sentence(logs[0].get('work_done', ''))}.")
+        # Name the day. Without it the opener sounds like a non-sequitur: the listener has no idea
+        # whether "last site day" was yesterday or a fortnight ago.
+        day = str(logs[0].get("log_date") or "").strip()
+        work = _first_sentence(logs[0].get("work_done", ""))
+        parts.append(f"Last logged day was {day}: {work}." if day else f"Last site day, {work}.")
     hold = next(iter(brief.get("open_hold_points") or []), None)
     permit = next((p for p in brief.get("active_permits") or [] if p.get("unsatisfied_mandatory_checks")), None)
     rfi = next((r for r in brief.get("open_rfis") or [] if r.get("status") == "Open"), None)
