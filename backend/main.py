@@ -86,6 +86,9 @@ def _user_id(request: Request) -> str:
         claims = jwt.decode(token, key, algorithms=["RS256"], issuer=config.CLERK_JWT_ISSUER,
                             options={"verify_aud": False}, leeway=5)
     except jwt.PyJWTError as exc:
+        # Mirrors tenancy/auth.py: the caller sees a generic message, the log says why
+        # (expired, wrong issuer, unknown signing key).
+        print(f"clerk auth rejected (v1): {type(exc).__name__}: {exc}", flush=True)
         raise HTTPException(401, "invalid sign-in token") from exc
     subject = str(claims.get("sub") or "")
     if not subject:

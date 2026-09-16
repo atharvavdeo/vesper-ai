@@ -91,6 +91,10 @@ def get_identity(request: Request) -> Identity:
         claims = jwt.decode(token, key, algorithms=["RS256"], issuer=config.CLERK_JWT_ISSUER,
                             options={"verify_aud": False}, leeway=5)
     except jwt.PyJWTError as exc:
+        # The client only ever sees "invalid sign-in token"; the reason (expired, wrong issuer,
+        # unknown signing key) belongs in the server log, where it is the difference between
+        # "sign in again" and "the issuer is misconfigured".
+        print(f"clerk auth rejected: {type(exc).__name__}: {exc}", flush=True)
         raise HTTPException(401, "invalid sign-in token") from exc
     parties = [p.strip() for p in os.getenv("CLERK_AUTHORIZED_PARTIES", "").split(",") if p.strip()]
     if parties and claims.get("azp") and claims["azp"] not in parties:
