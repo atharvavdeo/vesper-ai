@@ -218,8 +218,7 @@ export default function AskMemory() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-52px-3rem-4rem)] min-h-[520px] gap-4">
-      <div className="flex min-w-0 flex-1 flex-col">
+    <div className="relative flex h-[calc(100dvh-52px-3rem-4rem)] min-h-[520px] flex-col">
       <PageHeader
         eyebrow="Knowledge"
         title="Ask memory"
@@ -347,17 +346,30 @@ export default function AskMemory() {
           </div>
         ) : null}
       </Sheet>
-      </div>
 
-      <aside className="hidden w-[250px] shrink-0 flex-col pt-1 xl:flex">
-        <div className="mb-2 flex items-center justify-between gap-2">
+      {/* Floats over the empty right-hand gutter rather than taking a column of its own, so the
+          conversation stays centred at every width. Hidden below xl, where there is no gutter. */}
+      <aside
+        id="ask-history"
+        className="glass z-20 hidden w-[252px] flex-col p-2.5 xl:flex"
+        style={{
+          // .glass declares `position: relative` in globals.css, which sits outside Tailwind's
+          // utility layer and therefore beats `absolute` — without this the panel drops into the
+          // flow and lands under the composer. Inline wins.
+          position: "absolute",
+          right: 0,
+          top: 4,
+          maxHeight: "min(62vh, 520px)",
+        }}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2 pl-1">
           <p className="dash-eyebrow">History</p>
           <button className="dash-btn dash-btn-sm" onClick={newChat} title="Start a new chat">
             <Icon name="plus" size={13} /> New chat
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-0.5">
           {threads.length === 0 ? (
             <p className="card px-3 py-2.5 text-[12px] leading-relaxed text-ink-3">
               Past questions land here. They stay in this browser — Ask is read-only, so nothing is written to the
