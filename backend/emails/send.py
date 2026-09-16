@@ -40,6 +40,15 @@ KINDS: dict[str, dict[str, Any]] = {
         "subject": "{{DOCUMENT_TITLE}} is now in {{PROJECT_NAME}} memory",
         "variables": ["PROJECT_NAME", "DOCUMENT_TITLE", "CHUNKS", "STATUS", "PROJECT_URL"],
     },
+    # Broadcast: product news and release notes. Three highlight slots; leave a slot's variables
+    # empty and that card renders blank, so fill all three or trim the template for the send.
+    "product_update": {
+        "env": "RESEND_TEMPLATE_UPDATE",
+        "subject": "{{HEADLINE}}",
+        "variables": ["USER_NAME", "TAG", "HEADLINE", "INTRO",
+                      "ITEM_1_TITLE", "ITEM_1_BODY", "ITEM_2_TITLE", "ITEM_2_BODY",
+                      "ITEM_3_TITLE", "ITEM_3_BODY", "CTA_LABEL", "CTA_URL"],
+    },
 }
 
 _VAR = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
