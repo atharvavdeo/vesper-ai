@@ -22,6 +22,9 @@ landing = (out / "landing" / "index.html").read_text()
 # On the public link every "Launch App" opens the key-free laptop dashboard (recorded data + tour);
 # the phone console replay stays at /demo/.
 landing = landing.replace('href="/app"', 'href="/app/"')
+# The public build carries no Clerk keys, so the sign-in / sign-out links have nothing to talk to
+# (/sign-in* already redirects to /app/, and /sign-out has no rule at all). Drop those anchors.
+landing = re.sub(r'<a[^>]*href="/sign-(?:in|out)"[^>]*>.*?</a>', '', landing)
 (out / "index.html").write_text(landing)
 (out / "landing" / "index.html").write_text(landing)
 (out / "_redirects").write_text("/app /app/ 301\n/onboarding /onboarding/ 301\n/sign-in* /app/ 302\n/sign-up* /app/ 302\n/demo /demo/ 301\n")
