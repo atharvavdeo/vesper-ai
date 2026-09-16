@@ -1415,8 +1415,10 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
         <a class="nav-link appear appear--scale" style="--d:0.40s" href="#faqs">FAQs</a>
         <a class="nav-link appear appear--soft" style="--d:0.52s" href="#pricing">Pricing</a>
         <a class="nav-link appear appear--scale" style="--d:0.64s" href="/docs/index.html">Docs</a>
+        <a class="nav-link appear appear--soft" style="--d:0.76s" href="/sign-in">Sign in</a>
       </nav>
 
+      <a class="nav-link appear appear--soft" style="--d:0.70s" href="/sign-in">Sign in</a>
       <a class="btn btn-solid header-cta appear appear--scale" style="--d:0.34s" href="/app">Launch App</a>
       <button class="burger appear appear--scale" style="--d:0.34s" type="button" aria-controls="site-nav" aria-expanded="false" aria-label="Open menu"><span class="burger-bars" aria-hidden="true"><i></i><i></i><i></i></span></button>
     </header>
@@ -1939,7 +1941,7 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
     <div class="wrap foot-row">
       <a class="logo" href="#top" aria-label="Vesper.ai"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#mark"/></svg><span>Vesper<span class="logo-suffix">.ai</span></span></a>
       <nav class="foot-links" aria-label="Footer">
-        <a href="#benefits">Benefits</a><a href="#how-it-works">How It Works</a><a href="#pricing">Pricing</a><a href="#faqs">FAQs</a><a href="mailto:?subject=Vesper%20AI%20Contact&amp;body=Loved%20the%20application.%20I%27d%20like%20to%20talk%20about%20using%20Vesper%20on%20our%20site.">Contact us</a><a href="https://github.com/atharvavdeo/vesper-ai" target="_blank" rel="noreferrer">★ Star on GitHub</a>
+        <a href="#benefits">Benefits</a><a href="#how-it-works">How It Works</a><a href="#pricing">Pricing</a><a href="#faqs">FAQs</a><a href="mailto:?subject=Vesper%20AI%20Contact&amp;body=Loved%20the%20application.%20I%27d%20like%20to%20talk%20about%20using%20Vesper%20on%20our%20site.">Contact us</a><a href="https://github.com/atharvavdeo/vesper-ai" target="_blank" rel="noreferrer">★ Star on GitHub</a><a href="/sign-in">Sign in</a><a href="/sign-out">Sign out</a><a href="#" data-cookie-open>Cookie settings</a>
       </nav>
       <span class="foot-copy">© 2026 Vesper.ai · Built for Indian construction sites</span>
     </div>
@@ -2378,6 +2380,209 @@ body.menu-open .burger-bars i:nth-child(3) { transform: translateY(-6.5px) rotat
     });
     setIdx(0);
   })();
+})();
+</script>
+
+<!-- ============================================================ cookie consent
+     No cookie in any optional category is set until the visitor opts in. The choice lives in
+     localStorage (vesper_cookie_prefs) plus a mirror cookie so a server can read it later.
+     "Cookie settings" in the footer reopens the panel, so a choice is never final. -->
+<style>
+  .ck-bar, .ck-modal { font-family: inherit; }
+  .ck-bar {
+    position: fixed; left: 50%; bottom: 20px; transform: translate(-50%, 130%);
+    z-index: 90; width: min(920px, calc(100vw - 32px));
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px;
+    padding: 16px 18px; border-radius: 18px;
+    border: 1px solid var(--border); background: rgba(12, 12, 14, 0.86);
+    backdrop-filter: blur(22px) saturate(160%); -webkit-backdrop-filter: blur(22px) saturate(160%);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+    transition: transform .55s var(--ease), opacity .45s var(--ease);
+    opacity: 0;
+  }
+  .ck-bar[data-show] { transform: translate(-50%, 0); opacity: 1; }
+  .ck-bar p { margin: 0; flex: 1 1 320px; font-size: 13.5px; line-height: 1.6; color: var(--muted); }
+  .ck-bar p b { color: var(--text); font-weight: 600; }
+  .ck-bar .ck-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+  .ck-bar .btn, .ck-modal .btn { height: 38px; padding: 0 16px; font-size: 13px; }
+
+  .ck-modal[hidden], .ck-bar[hidden] { display: none !important; }
+  .ck-modal {
+    position: fixed; inset: 0; z-index: 95; display: grid; place-items: center;
+    padding: 20px; background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .ck-card {
+    width: min(560px, 100%); max-height: min(86vh, 720px); overflow: auto;
+    border-radius: 20px; border: 1px solid var(--border);
+    background: rgba(14, 14, 16, 0.97); padding: 24px;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7);
+  }
+  .ck-card h2 { margin: 0 0 6px; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  .ck-card > p { margin: 0 0 18px; font-size: 13.5px; line-height: 1.6; color: var(--muted); }
+  .ck-row {
+    display: flex; gap: 14px; align-items: flex-start;
+    padding: 14px 0; border-top: 1px solid var(--border-soft);
+  }
+  .ck-row h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+  .ck-row p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+  .ck-row .ck-text { flex: 1; }
+  .ck-sw {
+    position: relative; flex: 0 0 auto; width: 40px; height: 23px; border-radius: 999px;
+    border: 1px solid var(--border); background: rgba(255, 255, 255, 0.07);
+    cursor: pointer; transition: background .3s var(--ease), border-color .3s var(--ease);
+  }
+  .ck-sw::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px;
+    border-radius: 50%; background: #fff; transition: transform .3s var(--ease);
+  }
+  .ck-sw[aria-checked="true"] { background: #ffffff; border-color: #ffffff; }
+  .ck-sw[aria-checked="true"]::after { transform: translateX(17px); background: #000; }
+  .ck-sw[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+  .ck-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+  .ck-foot .btn:last-child { margin-left: auto; }
+  @media (max-width: 560px) {
+    .ck-bar .ck-actions, .ck-foot { width: 100%; }
+    .ck-bar .ck-actions .btn, .ck-foot .btn { flex: 1 1 auto; }
+    .ck-foot .btn:last-child { margin-left: 0; }
+  }
+</style>
+
+<div class="ck-bar" id="ck-bar" role="dialog" aria-live="polite" aria-label="Cookie choices" hidden>
+  <p><b>We keep this simple.</b> Only cookies needed to run the site are on by default. Analytics and preference cookies stay off until you say yes.</p>
+  <div class="ck-actions">
+    <button class="btn btn-ghost" type="button" data-ck="customise">Customise</button>
+    <button class="btn btn-ghost" type="button" data-ck="reject">Essential only</button>
+    <button class="btn btn-solid" type="button" data-ck="accept">Accept all</button>
+  </div>
+</div>
+
+<div class="ck-modal" id="ck-modal" role="dialog" aria-modal="true" aria-labelledby="ck-title" hidden>
+  <div class="ck-card">
+    <h2 id="ck-title">Cookie settings</h2>
+    <p>Change these whenever you like — “Cookie settings” in the footer brings this panel back.</p>
+
+    <div class="ck-row">
+      <div class="ck-text">
+        <h3>Strictly necessary</h3>
+        <p>Sign-in session, security and load balancing. The site cannot work without these, so they cannot be switched off.</p>
+      </div>
+      <span class="ck-sw" role="switch" aria-checked="true" aria-disabled="true" aria-label="Strictly necessary cookies (always on)"></span>
+    </div>
+
+    <div class="ck-row">
+      <div class="ck-text">
+        <h3>Analytics</h3>
+        <p>Anonymous page counts so we know which parts of the product people actually use. No profiling, no ad networks.</p>
+      </div>
+      <button class="ck-sw" type="button" role="switch" aria-checked="false" data-ck-toggle="analytics" aria-label="Analytics cookies"></button>
+    </div>
+
+    <div class="ck-row">
+      <div class="ck-text">
+        <h3>Preferences</h3>
+        <p>Remembers your theme, language and whether you have seen the product tour.</p>
+      </div>
+      <button class="ck-sw" type="button" role="switch" aria-checked="false" data-ck-toggle="preferences" aria-label="Preference cookies"></button>
+    </div>
+
+    <div class="ck-foot">
+      <button class="btn btn-ghost" type="button" data-ck="reject">Reject optional</button>
+      <button class="btn btn-ghost" type="button" data-ck="accept">Accept all</button>
+      <button class="btn btn-solid" type="button" data-ck="save">Save choices</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var KEY = 'vesper_cookie_prefs';
+  var bar = document.getElementById('ck-bar');
+  var modal = document.getElementById('ck-modal');
+  if (!bar || !modal) return;
+
+  var state = { analytics: false, preferences: false };
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { saved = null; }
+  if (saved && typeof saved === 'object') {
+    state.analytics = !!saved.analytics;
+    state.preferences = !!saved.preferences;
+  }
+
+  function paint() {
+    modal.querySelectorAll('[data-ck-toggle]').forEach(function (el) {
+      el.setAttribute('aria-checked', state[el.getAttribute('data-ck-toggle')] ? 'true' : 'false');
+    });
+  }
+
+  function persist() {
+    var payload = { analytics: state.analytics, preferences: state.preferences, decidedAt: new Date().toISOString(), version: 1 };
+    try { localStorage.setItem(KEY, JSON.stringify(payload)); } catch (e) { /* private mode */ }
+    // Mirror cookie so a server-rendered page can read the same choice. SameSite=Lax, one year.
+    try {
+      document.cookie = KEY + '=' + encodeURIComponent(JSON.stringify({ a: state.analytics ? 1 : 0, p: state.preferences ? 1 : 0 }))
+        + ';path=/;max-age=31536000;samesite=lax' + (location.protocol === 'https:' ? ';secure' : '');
+    } catch (e) { /* ignore */ }
+    document.dispatchEvent(new CustomEvent('vesper:cookie-consent', { detail: payload }));
+  }
+
+  function closeAll() {
+    bar.removeAttribute('data-show');
+    setTimeout(function () { bar.hidden = true; }, 420);
+    modal.hidden = true;
+  }
+
+  function decide(analytics, preferences) {
+    state.analytics = analytics;
+    state.preferences = preferences;
+    paint();
+    persist();
+    closeAll();
+  }
+
+  function openModal() {
+    paint();
+    modal.hidden = false;
+    var first = modal.querySelector('[data-ck-toggle]');
+    if (first) first.focus();
+  }
+
+  document.addEventListener('click', function (e) {
+    var open = e.target.closest('[data-cookie-open]');
+    if (open) { e.preventDefault(); bar.hidden = true; bar.removeAttribute('data-show'); openModal(); return; }
+
+    var toggle = e.target.closest('[data-ck-toggle]');
+    if (toggle) {
+      var k = toggle.getAttribute('data-ck-toggle');
+      state[k] = !state[k];
+      paint();
+      return;
+    }
+
+    var act = e.target.closest('[data-ck]');
+    if (!act) {
+      if (!modal.hidden && e.target === modal) modal.hidden = true;
+      return;
+    }
+    var kind = act.getAttribute('data-ck');
+    if (kind === 'accept') decide(true, true);
+    else if (kind === 'reject') decide(false, false);
+    else if (kind === 'save') decide(state.analytics, state.preferences);
+    else if (kind === 'customise') { bar.removeAttribute('data-show'); openModal(); }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !modal.hidden) modal.hidden = true;
+  });
+
+  // Never nag a visitor who already chose; only a first-time visitor sees the bar.
+  if (!saved) {
+    bar.hidden = false;
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { bar.setAttribute('data-show', ''); });
+    });
+  }
+  paint();
 })();
 </script>
 </body>
