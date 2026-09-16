@@ -96,6 +96,43 @@ export default function AskMemory() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Speak the question instead of typing it: record, send to /api/stt (Sarvam saaras, Hindi and
+  // English), and drop the transcript into the box so it can be corrected before asking.
+  const [rec, setRec] = useState<MediaRecorder | null>(null);
+  const [sttBusy, setSttBusy] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
+  const chunks = useRef<Blob[]>([]);
+
+  const startDictation = async () => {
+    setMicError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream);
+      chunks.current = [];
+      mr.ondataavailable = (e) => chunks.current.push(e.data);
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setRec(null);
+        setSttBusy(true);
+        try {
+          const { text } = await api.stt(new Blob(chunks.current, { type: "audio/webm" }));
+          const said = (text || "").trim();
+          if (said) setInput((cur) => (cur ? `${cur} ${said}` : said));
+          else setMicError("Nothing was heard — check the microphone input device.");
+          taRef.current?.focus();
+        } catch (e) {
+          setMicError((e as Error).message);
+        } finally {
+          setSttBusy(false);
+        }
+      };
+      mr.start();
+      setRec(mr);
+    } catch (e) {
+      setMicError(`Microphone unavailable: ${(e as Error).message}`);
+    }
+  };
+
   const openInspector = async (query: string, askTimings?: AskResponse["timings"]) => {
     setInspect({ query, loading: true, askTimings });
     const t0 = performance.now();
@@ -181,6 +218,21 @@ export default function AskMemory() {
         <span className="hidden items-center gap-1 pb-3 text-[11px] text-ink-3 sm:flex">
           <Kbd>↵</Kbd>
         </span>
+        <button
+          type="button"
+          className="dash-btn h-10 w-10 p-0"
+          style={rec ? { color: "var(--danger)", borderColor: "color-mix(in oklab, var(--danger) 45%, transparent)" } : undefined}
+          onClick={() => (rec ? rec.stop() : void startDictation())}
+          disabled={sttBusy}
+          aria-label={rec ? "Stop dictation" : "Ask by voice"}
+          title={rec ? "Stop and transcribe" : "Ask by voice (Hindi or English)"}
+        >
+          {sttBusy ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : (
+            <Icon name={rec ? "stop" : "mic"} size={15} />
+          )}
+        </button>
         <button type="submit" className="dash-btn dash-btn-primary h-10 w-10 p-0" disabled={busy || !input.trim()} aria-label="Ask">
           {busy ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Icon name="send" size={15} />}
         </button>
@@ -289,12 +341,84 @@ function Answer({ m, onInspect }: { m: Extract<Msg, { role: "assistant" }>; onIn
           {m.via === "engine" ? <Badge tone="warn">v1 site engine · memory layer offline</Badge> : <Badge tone="accent">memory</Badge>}
           {!r.abstain && m.via === "memory" ? <span className="tabular-nums">confidence {(r.confidence * 100).toFixed(0)}%</span> : null}
           {m.ms != null ? <span className="tabular-nums">{Math.round(m.ms)} ms</span> : null}
+          <SpeakAnswer text={r.answer} />
           <button onClick={onInspect} className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-surface-2 hover:text-ink">
             <Icon name="search" size={12} /> Inspect retrieval
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+/** Read the grounded answer out loud through /api/tts (Sarvam bulbul). Useful on site, where the
+ *  manager is holding a drawing rather than looking at the screen. */
+function SpeakAnswer({ text }: { text: string }) {
+  const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
+  const [failed, setFailed] = useState(false);
+  const audio = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(
+    () => () => {
+      audio.current?.pause();
+      audio.current = null;
+    },
+    [],
+  );
+
+  const stop = () => {
+    audio.current?.pause();
+    audio.current = null;
+    setState("idle");
+  };
+
+  const speak = async () => {
+    if (state === "playing") return stop();
+    if (state === "loading") return;
+    setState("loading");
+    setFailed(false);
+    const res = await api.tts(text);
+    if (!res.ok) {
+      setFailed(true);
+      setState("idle");
+      return;
+    }
+    const url = URL.createObjectURL(res.blob);
+    const el = new Audio(url);
+    audio.current = el;
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      audio.current = null;
+      setState("idle");
+    };
+    el.onended = cleanup;
+    el.onerror = () => {
+      setFailed(true);
+      cleanup();
+    };
+    try {
+      await el.play();
+      setState("playing");
+    } catch {
+      setFailed(true);
+      cleanup();
+    }
+  };
+
+  return (
+    <button
+      onClick={() => void speak()}
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-surface-2 hover:text-ink"
+      title={failed ? "Speech is unavailable on this backend" : state === "playing" ? "Stop" : "Read this answer aloud"}
+      aria-label={state === "playing" ? "Stop reading" : "Read this answer aloud"}
+    >
+      {state === "loading" ? (
+        <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+      ) : (
+        <Icon name={state === "playing" ? "stop" : "play"} size={12} />
+      )}
+      {state === "playing" ? "Stop" : failed ? "No audio" : "Listen"}
+    </button>
   );
 }
 
