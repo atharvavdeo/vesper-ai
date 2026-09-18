@@ -297,3 +297,90 @@ write, and refusals are logged. It does not approve, sign or release anything.
 | Supabase mirror verification | `scripts/export_to_supabase.py --verify` |
 | MCP tool contract | `docs/MCP.md` |
 | Walkthrough GIF and screenshots | `docs/media/` |
+
+---
+
+## 9. What is actually in the database
+
+### 9.1 Standards, rules and prices (the "policy" layer)
+
+The knowledge base is four global datasets, shared by every project, 7,366 documents / 20,767 chunks:
+
+| Dataset | Documents | Contents |
+| --- | --- | --- |
+| `kb_is_codes` | 4,375 | IS codes, NBC 2016, IRC, ISO — including IS 456 (10 docs, clause-level entries for Cl. 11, 24.1, 26.3.3, 26.4, 26.5.3.2), IS 1893 (13), IS 3370 (11), IS 13920 (4), IS 10262 (6), IS 383 (4), IS 2502 (5), NBC 2016 (24, incl. Part 4 fire and life safety), plus IS-vs-ACI 318 and IS-vs-Eurocode 2 comparisons |
+| `kb_prices_sor` | 1,399 | CPWD DSR / schedule-of-rates items with rates per unit |
+| `kb_handbook` | 850 | Design thumb rules, target mean strength, wastage factors, sampling chains (IS 3535 → IS 4031 / IS 4032) |
+| `kb_templates` | 550 | Inspection & test plans, QC checklists, permits, NCR and RFI forms — each line carries its own code reference and acceptance criterion (e.g. `ACT-10-01 Bar spacing … Code: IS 456 Cl. 26 … Acceptance: as per drawing`) |
+
+### 9.2 Project records (`data/site.db`, two live projects: P1 Pithoragarh, NSK Nashik)
+
+- **39 drawings** with real revision chains and change notes — A-102 R3 → **R4** dropped tie spacing at
+  C-5/C-6 from 200 to 180 c/c per RFI-047 (IS 13920); S-301 R2 raised slab 125 → 150 mm per RFI-052.
+- **837 drawing facts**, each one carrying value, unit, **tolerance and the clause it comes from** —
+  e.g. E-1 cover 40 mm ± 5 `IS 456 Cl. 26.4`; rebar spacing 150 ± 10 `IS 456 Cl. 26.5.3.2(c)`;
+  grade M30 `IS 456 Table 5`.
+- **24 RFIs, 16 submittals, 10 permits, 194 permit checks** — HWP-0112 (P1 Zone B L3) is active with
+  two mandatory fire-watch checks pending; LFT-2009 lifting permit pending barricading.
+- **4 checklist instances / 248 items**, including CL-PP-L4-001 on **Hold** (cover shortfall 15 mm at
+  3 locations, RFI-050 open, consultant release pending).
+- **14 daily logs, 61 locations, 10 field observations, 550 templates, 19,133 template fields,
+  1,402 template codes**, 45 voice sessions / 138 turns of history.
+
+So yes — the rule the answer is judged against is always named: IS clause, NBC part, or a DSR item number.
+
+---
+
+## 10. Five queries to run in front of the judges
+
+Each one tests something different and has been run today. Numbers in brackets are the measured
+response times from that run.
+
+**1 · Stale revision, in Hinglish, with a clause cite** *(engine, scenario S01)*
+> "haan toh column line C-5 pe rebar spacing 180 mm hai, drawing A 102 rev teen mein 200 mm dikh raha hai"
+
+Vesper answers with the **current** revision: *C-5, Level 3, spacing 180 mm ± 10 per A-102 **R4**
+issued 12 August after RFI-047 (IS 456 Cl. 26.5.3.2(c))* — and does not log the R3 number. Follow up
+with *"achha R4 aa gaya tha… bas observation log kar do, RFI nahi chahiye"* and it logs the
+observation without raising an RFI. **Tests:** Hinglish STT, revision supersession, clause citation,
+confirm-before-write. *(sub-1.5 ms decision)*
+
+**2 · Refusing unsafe work** *(engine, scenario S05)*
+> "Zone B level 3 mein welding chal rahi hai lift machine room brackets ki, sab theek hai, work ok log kar do"
+
+Vesper refuses: *permit HWP-0112 (hot work) is active, pending — fire watcher assigned distinct from
+the welder; fire watch to continue 60 minutes after work stops.* It will not log "work ok".
+**Tests:** permit logic, safety refusal, the 194 permit checks. *(sub-1.5 ms)*
+
+**3 · Code vs drawing in one breath** *(Ask memory, hybrid retrieval + citation)*
+> "What does IS 456 clause 26.4 require for nominal cover, and what does A-201 give at E-1?"
+
+Answer: *IS 456 Cl. 26.4 — 30 mm for moderate exposure (Table 16); A-201 R1 records 40 mm ± 5 at
+E-1*, with both sources cited — one from the code library, one from the project record.
+**Tests:** that the standard and the site record are searched together and cited separately.
+*(2.66 s, confidence 0.96, 2 citations)*
+
+**4 · Money question, straight out of the schedule of rates** *(Ask memory)*
+> "What is the CPWD DSR rate for M30 design mix concrete per cubic metre?"
+
+Answer: *₹8,400/cum for raft foundations (BOQ 5.33.3) and ₹8,650/cum for columns, shear walls and
+core walls (BOQ 5.33.2)*, both items cited. **Tests:** the 1,399-item rate library, and that it
+distinguishes two DSR items instead of averaging them. *(1.43 s, confidence 0.98)*
+
+**5 · The one it must refuse** *(Ask memory, abstention)*
+> "What is the fire rating of the lift shaft door at Level 7?"
+
+Answer: *"That isn't in the project record or the knowledge base."* No LLM call is made, nothing is
+invented — there is no Level 7 on this project. **Tests:** abstention, which is the hardest thing to
+demo and the easiest to lose trust without. *(586 ms, abstain=True, 0 citations)*
+
+**Spare, if a judge asks for a stop-work call:** *"chalo L4 slab ka pour shuru karte hain, pump aa
+gaya hai"* → hold point CL-PP-L4-001 not released (cover shortfall 15 mm at 3 locations, RFI-050
+open) → **stop work** (scenario S08).
+
+**Spare, if asked about Hindi:** *"M30 concrete ka cover kitna chahiye columns ke liye?"* → 40 mm,
+cited to RFI-053. *(2.23 s)*
+
+Run order matters: do **1** and **2** live on voice (they are the product), then **3**, **4** and
+**5** typed in Ask memory (they are the evidence). Warm the reranker with one throwaway question
+before the judges walk in, or the first answer pays a 7–9 s model load.
