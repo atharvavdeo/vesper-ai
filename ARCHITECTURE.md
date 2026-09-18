@@ -47,7 +47,7 @@ flowchart LR
     LiveKit["LiveKit Cloud<br/>room routing + WebRTC SFU"]:::external
     Groq["Groq Whisper / fallback LLM"]:::external
     NIM["Cerebras gpt-oss-120b → NVIDIA NIM<br/>LLM fallback chain (unresolved questions only)"]:::external
-    Rime["Rime Arcana<br/>mistv3 · cove · eng · WebSocket"]:::external
+    Rime["Rime<br/>mistv3 · wildflower · eng · WebSocket"]:::external
   end
 
   Manager --> Landing
@@ -358,7 +358,7 @@ Both directions are server-side: the browser records or plays audio, but never h
 | `POST /api/tts` | `{"text", "language"}` (`en-IN` / `hi-IN`) | `audio/wav` from Sarvam, `audio/mpeg` from Rime | Sarvam `bulbul:v3` → Rime `mistv3` |
 | `POST /api/rtc/token` | `{"projectId", "language", "name"}` | LiveKit room token; `projectId` and user ride in participant metadata | LiveKit |
 
-Consumers: the live voice agent streams through LiveKit (Sarvam realtime STT in, Sarvam TTS out);
+Consumers: the live voice agent streams through LiveKit (Sarvam realtime STT in, Rime TTS out);
 the Talk screen and **Ask memory** use the two HTTP endpoints — Ask's microphone button posts a
 recording to `/api/stt` and drops the transcript into the question box, and its "Listen" button
 plays `/api/tts` over the grounded answer.
@@ -366,7 +366,8 @@ plays `/api/tts` over the grounded answer.
 Every reply passes `engine.speech.speakable()` before synthesis, so what is spoken is short,
 unpunctuated by typographic dashes and length-capped, whichever provider serves it.
 
-`TTS_PROVIDER=rime` and `STT_PROVIDER=groq` pin a single provider; `SARVAM_TTS_SPEAKER` and
+`AGENT_TTS_PROVIDER` picks the live agent's voice (Rime by default, as the problem statement names
+it); `TTS_PROVIDER=rime` and `STT_PROVIDER=groq` pin a single provider for the web paths; `SARVAM_TTS_SPEAKER` and
 `SARVAM_TTS_MODEL` choose the voice. Note that Sarvam retired `bulbul:v2`, and a v2-only voice such
 as `anushka` raises at construction — the agent catches that and falls back to Rime rather than
 joining a call mute.
