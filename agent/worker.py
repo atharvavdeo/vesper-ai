@@ -186,22 +186,28 @@ def _stt(vad) -> stt.STT:
                                max_retry_per_stt=1, retry_interval=2.0)
 
 
+def _voice_tts_provider() -> str:
+    """The live voice agent speaks through Rime: it is named in the problem statement, so the demo
+    path stays on it. AGENT_TTS_PROVIDER overrides it for the agent alone; TTS_PROVIDER still picks
+    the provider for the Talk screen and Ask memory's "Listen" button."""
+    return os.getenv("AGENT_TTS_PROVIDER", "rime").strip().lower()
+
+
 def tts_description(language: str = "en-IN") -> dict:
-    if os.getenv("TTS_PROVIDER", "sarvam").strip().lower() == "sarvam" and _keyok("SARVAM_API_KEY"):
+    if _voice_tts_provider() == "sarvam" and _keyok("SARVAM_API_KEY"):
         return {"provider": "sarvam", "model": os.getenv("SARVAM_TTS_MODEL", "bulbul:v3"),
                 "speaker": os.getenv("SARVAM_TTS_SPEAKER", "ritu"),
                 "lang": "hi-IN" if str(language).lower().startswith("hi") else "en-IN",
                 "transport": "https"}
-    return {"provider": "rime", "model": "mistv3", "lang": "eng",
-            "speaker": os.getenv("RIME_SPEAKER_EN", "cove"), "transport": "websocket"}
+    return {"provider": "rime", "model": os.getenv("RIME_MODEL_EN", "mistv3"), "lang": "eng",
+            "speaker": os.getenv("RIME_SPEAKER_EN", "wildflower"), "transport": "websocket"}
 
 
 def _tts(language: str = "en-IN"):
-    """Sarvam bulbul by default: its Indian English and Hindi voices read as local on site, where
-    Rime's English sounds foreign to the managers this is built for. bulbul:v3 is the cheapest one
-    still served — v2 answers "Model 'bulbul:v2' has been deprecated". TTS_PROVIDER=rime restores
-    the previous path, and the engine's spoken text is identical either way."""
-    if os.getenv("TTS_PROVIDER", "sarvam").strip().lower() == "sarvam" and _keyok("SARVAM_API_KEY"):
+    """Rime by default in voice mode, because the problem statement names it. Sarvam bulbul is still
+    available with AGENT_TTS_PROVIDER=sarvam (its Indian English reads as more local on site), and
+    it is what the Talk screen and Ask memory use; the engine's spoken text is identical either way."""
+    if _voice_tts_provider() == "sarvam" and _keyok("SARVAM_API_KEY"):
         try:
             return sarvam.TTS(
                 target_language_code="hi-IN" if str(language).lower().startswith("hi") else "en-IN",
@@ -215,7 +221,8 @@ def _tts(language: str = "en-IN"):
             # as a dead line. Voice is the product — fall back to Rime instead of going silent.
             logger.warning("Sarvam TTS unavailable (%s); falling back to Rime", e)
     # English, low latency: mistv3 over websocket cuts first-audio delay.
-    return rime.TTS(model="mistv3", speaker=os.getenv("RIME_SPEAKER_EN", "cove"), lang="eng",
+    return rime.TTS(model=os.getenv("RIME_MODEL_EN", "mistv3"),
+                    speaker=os.getenv("RIME_SPEAKER_EN", "wildflower"), lang="eng",
                     api_key=os.getenv("RIME_API_KEY"), use_websocket=True)
 
 
