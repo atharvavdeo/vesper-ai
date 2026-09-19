@@ -30,3 +30,6 @@ data/app.db.bak-*
 
 # rendered email previews (scripts/send_product_update.py --preview)
 *_preview.html
+
+# presentation notes, kept local
+docs/ROUND2_BRIEF.md
