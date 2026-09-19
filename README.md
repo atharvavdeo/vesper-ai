@@ -48,16 +48,53 @@ citations, or an explicit "that isn't in the record".
 
 > **Voice is the safety gate, not a transcription box.**
 
-What's new in v2:
+### What Vesper does that a site system usually cannot
 
-- **Memory layer** — local hybrid retrieval (bge-m3 vectors in LanceDB + SQLite FTS5 BM25 → RRF → cross-encoder
-  rerank → abstain threshold) over ~20k chunks, a Cognee knowledge graph, and grounded answers with citations.
-- **Multi-tenant onboarding** — Clerk Organizations for client companies, a 12-step project wizard (92
-  real-world fields) whose answers become the project's prime memory, and Resend emails.
-- **Ingest anything** — upload documents, paste text, or speak a voice briefing; searchable in seconds.
-- **Laptop dashboard** — Linear-style shell, light/dark with Liquid Glass surfaces, ⌘K, Ask memory with a
-  retrieval inspector, memory graph, site tables, scenarios and a Driver.js tour.
-- **Sarvam STT** — `saaras:v3-realtime` for Indian speech plus a site-vocabulary normaliser; Groq Whisper is the fallback.
+**It answers against the current revision, not the one in your head.** Say *"C-5 pe spacing 180, A-102 rev
+teen mein 200 dikh raha hai"* and Vesper replies with **A-102 R4 — 180 c/c ± 10, reissued after RFI-047 for
+ductile detailing (IS 456 Cl. 26.5.3.2(c))**. The superseded number never reaches the log. Revision chains,
+change notes and the RFI that caused the change are all in the record.
+
+**It stops a wrong number before it becomes rework.** A spoken value is checked against the drawing fact,
+its tolerance and its clause. Cover 25 mm at B-4 against 40 ± 5 does not get logged as "cover done" — it
+becomes a challenge, and then an NCR if you say so. Five rules decide this, all of them SQL over the site
+record: `dimension_mismatch`, `revision_mismatch`, `unknown_drawing`, `permit_blocker`, `hold_point_blocker`.
+
+**It refuses unsafe work out loud.** Ask to log welding in Zone B Level 3 as fine and it names the permit
+that is not satisfied — *HWP-0112, fire watcher not assigned, fire watch to continue 60 minutes after work
+stops* — and offers stop-work. Pre-pour hold points behave the same way: the L4 pour is held while cover
+shortfall and RFI-050 are open, pump and RMC truck at the gate notwithstanding.
+
+**It knows the codes, the checklists and the rates, and it cites them.** IS 456, IS 1893, IS 13920,
+IS 10262, NBC 2016 Part 4, IRC and ISO clause text, 550 ITP / QA-QC / PMC templates with acceptance criteria,
+and 1,399 CPWD DSR rate items. Ask what the DSR rate for M30 is and you get ₹8,400/cum for raft against
+₹8,650/cum for columns — two line items, cited separately, not averaged into a number nobody can defend.
+
+**It says "not in the record" instead of inventing.** No Level 7 on this job means no answer about a
+Level 7 lift shaft door — the LLM is never called. Abstain precision and recall are both 1.000 on the
+43-question golden set, with zero cross-project leaks.
+
+**It works the way a site actually talks.** English, Hindi and Hinglish in one sentence, drill noise at
+5 dB SNR, and mid-sentence corrections — *"wait, not E-1, E-2"* — cut the spoken reply off in ~1 s and the
+engine keeps the correction, never the original.
+
+**Only the enrolled manager can write.** A local voiceprint gate verifies the speaker on the utterance that
+carries the command, not once at login; an unenrolled voice scores 0.03 against a 0.70 threshold and nothing
+is written. Every turn is stored with the drawing revision it was checked against, so any log can be audited
+after the fact.
+
+**Everything the site produces becomes memory.** Drawings, BOQ, DPRs, RFIs, submittals, permits, checklists
+in PDF / DOCX / XLSX / CSV, pasted text, or a spoken briefing at the end of the day — chunked, embedded and
+citable within seconds, isolated per project so two clients can never see each other's job.
+
+**One console for the whole job.** Client company onboards as an organization, a 12-step wizard (92
+real-world fields) turns the project's own facts into its first memory, and the laptop dashboard carries
+site tables, Ask memory with a retrieval inspector, the knowledge graph, the audit trail and the scenario
+suite. The phone console is what the manager carries on site.
+
+**And the judgement never leaves the laptop.** Embeddings, reranking, the vector store, the record, the
+graph and the speaker gate all run locally. Cloud services carry audio, phrasing and sign-in only — so an
+expired provider key changes the voice, not the verdict.
 
 ---
 
@@ -87,6 +124,13 @@ Vesper reframes voice from *capture* to *verification*:
 
 ```mermaid
 flowchart LR
+    classDef human fill:#fef9c3,stroke:#ca8a04,color:#713f12,stroke-width:2px
+    classDef voice fill:#ede9fe,stroke:#7c3aed,color:#4c1d95,stroke-width:2px
+    classDef logic fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
+    classDef data fill:#ffedd5,stroke:#ea580c,color:#7c2d12,stroke-width:2px
+    classDef gate fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:3px
+    classDef good fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+
     A["🎙️ Manager speaks<br/>Hinglish · noisy · interrupted"] --> S["Sarvam STT<br/>+ site-vocabulary normaliser"]
     S --> B["Entity extraction<br/>location · element · attribute<br/>value · drawing · revision"]
     B --> C["Site record<br/>v_current_facts · v_permit_blockers<br/>v_open_hold_points"]
@@ -97,6 +141,13 @@ flowchart LR
     G --> E
     G --> H["📄 Raise RFI / NCR<br/>⛔ Stop work"]
     B -->|knowledge question| M["Memory layer<br/>hybrid retrieval → cited answer<br/>or abstain"]
+
+    class A,G human
+    class S,F voice
+    class B,M logic
+    class C data
+    class D gate
+    class E,H good
 ```
 
 **1 · It opens with memory, not a menu.** The agent has read the last DPRs, open RFIs, submittals and hold
@@ -173,7 +224,7 @@ on recorded product output — no sign-in, no keys. The spoken walkthrough is in
 | Same question under drill noise, 5 dB SNR | answered correctly — **PASS** |
 | A different voice says "log that observation" | voiceprint 0.03 < 0.70 → refused, nothing written — **PASS** |
 | Enrolled manager says it | written, linked to A-201@R1 — **PASS** |
-| End of turn → first audible Rime audio | median **1988 ms** with batch Whisper (target ≤ 1500 ms) — **MISS**; v2 moves live STT to Sarvam streaming, re-measurement pending |
+| End of turn → first audible Rime audio | median **1988 ms** with batch Whisper (target ≤ 1500 ms) — **MISS**; the live path now streams Sarvam `saaras:v3-realtime`, re-measurement pending |
 
 **Engine** — `backend/scenarios.py`: **10 / 10** scripted scenarios with deliberate errors, garbled fields and
 barge-in, **0 wrong logs**.
@@ -260,6 +311,14 @@ flowchart TB
         RESEND["Resend"]
     end
 
+    classDef client fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:2px
+    classDef edgec fill:#e0e7ff,stroke:#4f46e5,color:#312e81,stroke-width:2px
+    classDef svc fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef guard fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:3px
+    classDef voicec fill:#ede9fe,stroke:#7c3aed,color:#4c1d95,stroke-width:2px
+    classDef storec fill:#ffedd5,stroke:#ea580c,color:#7c2d12,stroke-width:2px
+    classDef extc fill:#fce7f3,stroke:#db2777,color:#831843,stroke-width:2px
+
     PH & LT --> MW --> UI -->|"Bearer JWT"| AUTH
     LP -.->|"no backend, no keys"| LP
     MC -->|"JSON-RPC 2.0"| TOOL
@@ -276,6 +335,14 @@ flowchart TB
     TEN --> RESEND
     AUTH -.->|"JWKS"| CLERK
     APP & VEC -.->|"scripts/export_to_supabase.py"| SUPA
+
+    class PH,LT,LP,MC client
+    class MW,UI edgec
+    class ENG,MEM,TEN,TOOL svc
+    class AUTH,VP guard
+    class W voicec
+    class SITE,APP,VEC,SUPA storec
+    class CLERK,RIME,SARVAM,LLM,OLL,RESEND extc
 ```
 
 ### Processes and ports
@@ -329,7 +396,7 @@ flowchart TB
     subgraph st["Storage · store.py"]
         LV[("LanceDB<br/>chunks table<br/>vector(1024) + scope keys")]
         FT[("SQLite FTS5<br/>chunks_fts<br/>unicode61, external content")]
-        KG[("Cognee graph<br/>Kuzu / Ladybug<br/>378 nodes · 1419 edges")]
+        KG[("Cognee graph<br/>Kuzu / Ladybug<br/>896 nodes · 3906 edges")]
     end
 
     subgraph ret["Query · retrieve.py → rerank.py → answer.py"]
@@ -344,6 +411,13 @@ flowchart TB
         NO["🚫 'not in the record'"]
     end
 
+    classDef ingest fill:#cffafe,stroke:#0891b2,color:#164e63,stroke-width:2px
+    classDef storec fill:#ffedd5,stroke:#ea580c,color:#7c2d12,stroke-width:2px
+    classDef query fill:#e0e7ff,stroke:#4f46e5,color:#312e81,stroke-width:2px
+    classDef gate fill:#fee2e2,stroke:#dc2626,color:#7f1d1d,stroke-width:3px
+    classDef good fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
+    classDef refuse fill:#fef9c3,stroke:#ca8a04,color:#713f12,stroke-width:2px
+
     EMB --> LV
     CH --> FT
     CH -.->|"background worker"| KG
@@ -353,6 +427,13 @@ flowchart TB
     AB -->|no| NO
     LV --> VS
     FT --> BM
+
+    class SRC,PARSE,CH,EMB ingest
+    class LV,FT,KG storec
+    class Q,QE,VS,BM,RRF,RR query
+    class AB gate
+    class ANS good
+    class NO refuse
 ```
 
 ### Why hybrid, not just vectors

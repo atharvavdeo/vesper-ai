@@ -253,9 +253,9 @@ flowchart LR
 The static build writes its own `404.html`, so the build explicitly copies `app/public/404.html` over
 it — otherwise Cloudflare serves the framework default instead of the project's page.
 
-## 6. v2: memory layer, tenancy and onboarding
+## 6. Memory layer, tenancy and onboarding
 
-v2 adds three things around the unchanged deterministic engine: a local memory layer for
+Three layers sit around the deterministic engine, which they never override: a local memory layer for
 knowledge questions, multi-tenant onboarding, and a laptop dashboard. The safety invariant is
 unchanged — drawing facts, revisions, permits and hold points are still decided by the engine
 over `site.db`; memory answers knowledge questions with citations and never authorises a log.
